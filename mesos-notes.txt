@@ -1,0 +1,141 @@
+ZOOKEEPER
+---------------
+aws ec2 run-instances --image-id ami-0323c3dd2da7fb37d --count 1 --instance-type t2.micro --iam-instance-profile Name=zookeeperInstanceRole \
+--key-name ecs-key-pair-us-east-1 --security-group-ids sg-69e3fc1c \
+--block-device-mappings file:///Users/markthill/projects/containers/mesos/mesos-setup/mapping.json
+
+aws ec2 run-instances --image-id ami-039a49e70ea773ffc --count 1 --instance-type c5.2xlarge --iam-instance-profile Name=zookeeperInstanceRole \
+--key-name ecs-key-pair-us-east-1 --security-group-ids sg-69e3fc1c --subnet-id subnet-d76fb78a \
+--block-device-mappings file:///Users/markthill/projects/containers/mesos/mesos-setup/mapping.json
+
+aws ec2 run-instances --image-id ami-039a49e70ea773ffc --count 1 --instance-type t3.medium --iam-instance-profile Name=zookeeperInstanceRole \
+--key-name ecs-key-pair-us-east-1 --security-group-ids sg-69e3fc1c --subnet-id subnet-d76fb78a
+
+Instance ID: i-06782fe5c4a4c45ee
+
+# attach ebs volume
+aws ec2 attach-volume --volume-id vol-04cd9820d81d1e436 --instance-id i-0c60970e0f32d5cf3 --device /dev/sdh
+
+aws ec2 describe-instances | jq '.Reservations[].Instances[] | select(.InstanceId == "i-06782fe5c4a4c45ee").PublicDnsName'
+
+public DNS: ec2-54-162-157-4.compute-1.amazonaws.com
+
+# SSH to the ec2 instance
+ssh -i /Users/markthill/projects/aws/key-pairs/ecs-key-pair-us-east-1.pem ec2-user@ec2-3-80-176-238.compute-1.amazonaws.com
+ssh -i /Users/markthill/projects/aws/key-pairs/ecs-key-pair-us-east-1.pem ubuntu@ec2-54-198-196-103.compute-1.amazonaws.com
+
+# attach ebs volume
+sudo mkdir /data
+sudo mount /dev/nvme1n1 /data
+
+# centos
+sudo yum install java-1.8.0-openjdk
+
+# ubuntu
+sudo apt-get update
+ssudo apt-get install -y openjdk-8-jdk
+
+mkdir zookeeper
+cd zookeeper/
+wget http://archive.apache.org/dist/zookeeper/zookeeper-3.6.1/apache-zookeeper-3.6.1-bin.tar.gz
+tar -zxf apache-zookeeper-3.6.1-bin.tar.gz
+cd conf
+zoo_sample.cfg zoo.cfg
+change the data dir to /data/apps/zookeeper/data
+cd ..
+bin/zkServer.sh start
+
+
+
+MESOS
+-------------
+aws ec2 run-instances --image-id ami-039a49e70ea773ffc --count 1 --instance-type t3.medium --iam-instance-profile Name=zookeeperInstanceRole \
+--key-name ecs-key-pair-us-east-1 --security-group-ids sg-69e3fc1c --subnet-id subnet-d76fb78a --user-data \
+file:///Users/markthill/projects/containers/mesos/mesos-setup/mesos-userdata.txt | jq '.Instances[0].InstanceId'
+
+Instance ID: i-0a9f95562dd601b29
+
+aws ec2 describe-instances | jq '.Reservations[].Instances[] | select(.InstanceId == "i-0a9f95562dd601b29").PublicDnsName'
+
+publlic DNS:  ec2-54-198-162-175.compute-1.amazonaws.com
+
+ssh -i /Users/markthill/projects/aws/key-pairs/ecs-key-pair-us-east-1.pem ubuntu@ec2-54-242-182-7.compute-1.amazonaws.com
+
+start-zoo
+
+
+
+
+aws ec2 attach-volume --volume-id vol-04cd9820d81d1e436 --instance-id i-038ca5a2241e05fc6 --device /dev/sdh
+
+install dependencies
+
+http://mesos.apache.org/documentation/latest/building/
+
+
+keys
+---------
+openssl req -x509 -newkey rsa:4096 -keyout key-np.pem -out cert-np.pem -days 10000 -nodes
+
+bypass security:  "thisisunsafe"
+
+
+
+bin/zkServer.sh start
+
+bin/mesos-master.sh --ip=<private ip> --hostname=<public dns> --work_dir=/data/apps/mesos/work-dir
+bin/mesos-master.sh --ip=172.31.46.15 --hostname=ec2-3-91-77-251.compute-1.amazonaws.com --work_dir=/data/apps/mesos/work-dir
+
+bin/mesos-agent.sh --master=<private ip>:5050 --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false
+bin/mesos-agent.sh --master=172.31.43.4:5050 --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false
+
+
+MARATHON
+-------------------
+
+export MESOS_NATIVE_JAVA_LIBRARY=/data/apps/mesos/mesos-1.9.0/build/src/.libs/libmesos.so
+
+switch port to 8081 for marathon
+
+./bin/marathon --master 172.31.43.4:5050 --zk zk://172.31.43.4:2181/marathon --http_port 8081 --hostname ec2-34-207-239-167.compute-1.amazonaws.com --webui_url ec2-34-207-239-167.compute-1.amazonaws.com
+./bin/marathon --master ec2-18-215-239-193.compute-1.amazonaws.com --zk zk://ec2-18-215-239-193.compute-1.amazonaws.com:2181/marathon --http_port 8081
+
+/data/apps/marathon/marathon-1.5.0-96-gf84298d/bin/marathon --https_port 8082 --ssl_keystore_path /data/pki/mesos/marathon.jks --ssl_keystore_password foobar --master 172.31.40.84:5050 --zk zk://172.31.40.84:2181/marathon --disable_http
+
+
+
+commands from 5/19
+master
+/data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --ip=172.31.40.84 --hostname=ec2-54-242-182-7.compute-1.amazonaws.com --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log
+agent
+/data/apps/mesos/mesos-1.9.0/build/bin/mesos-agent.sh --master=172.31.40.84:5050 --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false --containerizers=docker --resources="ports(*):[80-81, 8000-9000, 31000-32000]"
+marathon
+/data/apps/marathon/marathon-1.5.0-96-gf84298d/bin/marathon --https_port 8082 --ssl_keystore_path /data/pki/mesos/mesoskeystore.jks --ssl_keystore_password foobar --master 172.31.40.84:5050 --zk zk://172.31.40.84:2181/marathon --disable_http --logging_level all
+
+
+
+
+----------------------------------------------------------------
+# BROKEN OUT COMPONENTS
+----------------------------------------------------------------
+
+
+ZOOKEEPER
+----------------------------------------------------------------
+
+aws ec2 run-instances --image-id ami-039a49e70ea773ffc --count 1 --instance-type t3.micro --iam-instance-profile Name=zookeeperInstanceRole \
+--key-name ecs-key-pair-us-east-1 --security-group-ids sg-69e3fc1c --subnet-id subnet-d76fb78a --user-data \
+file:///Users/markthill/projects/containers/mesos/mesos-setup/zookeeper-userdata.txt  \
+--tag-specifications 'ResourceType=instance,Tags=[{Key=tier,Value=zookeeper}]' | jq '.Instances[0].InstanceId'
+
+instance-id:  i-08930d4096148ad74
+
+aws ec2 describe-instances | jq '.Reservations[].Instances[] | select(.InstanceId == "i-08930d4096148ad74").PublicDnsName'
+
+dns:  ec2-34-207-213-233.compute-1.amazonaws.com
+
+ssh -i /Users/markthill/projects/aws/key-pairs/ecs-key-pair-us-east-1.pem ubuntu@ec2-34-207-213-233.compute-1.amazonaws.com
+
+
+MESOS MASTER/agent
+----------------------------------------------------------------

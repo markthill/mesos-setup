@@ -1,0 +1,106 @@
+{
+    "Groups": [],
+    "Instances": [
+        {
+            "AmiLaunchIndex": 0,
+            "ImageId": "ami-039a49e70ea773ffc",
+            "InstanceId": "i-0cbe90bc6f57c7823",
+            "InstanceType": "t3.large",
+            "KeyName": "ecs-key-pair-us-east-1",
+            "LaunchTime": "2020-05-15T13:06:06.000Z",
+            "Monitoring": {
+                "State": "disabled"
+            },
+            "Placement": {
+                "AvailabilityZone": "us-east-1d",
+                "GroupName": "",
+                "Tenancy": "default"
+            },
+            "PrivateDnsName": "ip-172-31-43-4.ec2.internal",
+            "PrivateIpAddress": "172.31.43.4",
+            "ProductCodes": [],
+            "PublicDnsName": "",
+            "State": {
+                "Code": 0,
+                "Name": "pending"
+            },
+            "StateTransitionReason": "",
+            "SubnetId": "subnet-d76fb78a",
+            "VpcId": "vpc-af81e9d7",
+            "Architecture": "x86_64",
+            "BlockDeviceMappings": [],
+            "ClientToken": "",
+            "EbsOptimized": false,
+            "Hypervisor": "xen",
+            "IamInstanceProfile": {
+                "Arn": "arn:aws:iam::236189869841:instance-profile/zookeeperInstanceRole",
+                "Id": "AIPATN7QDM4IQW2WGIGAC"
+            },
+            "NetworkInterfaces": [
+                {
+                    "Attachment": {
+                        "AttachTime": "2020-05-15T13:06:06.000Z",
+                        "AttachmentId": "eni-attach-09973aa6134e59f0e",
+                        "DeleteOnTermination": true,
+                        "DeviceIndex": 0,
+                        "Status": "attaching"
+                    },
+                    "Description": "",
+                    "Groups": [
+                        {
+                            "GroupName": "mark_SG_useast1",
+                            "GroupId": "sg-69e3fc1c"
+                        }
+                    ],
+                    "Ipv6Addresses": [],
+                    "MacAddress": "0e:95:90:5d:64:63",
+                    "NetworkInterfaceId": "eni-09a49c2a6a6f36d01",
+                    "OwnerId": "236189869841",
+                    "PrivateDnsName": "ip-172-31-43-4.ec2.internal",
+                    "PrivateIpAddress": "172.31.43.4",
+                    "PrivateIpAddresses": [
+                        {
+                            "Primary": true,
+                            "PrivateDnsName": "ip-172-31-43-4.ec2.internal",
+                            "PrivateIpAddress": "172.31.43.4"
+                        }
+                    ],
+                    "SourceDestCheck": true,
+                    "Status": "in-use",
+                    "SubnetId": "subnet-d76fb78a",
+                    "VpcId": "vpc-af81e9d7",
+                    "InterfaceType": "interface"
+                }
+            ],
+            "RootDeviceName": "/dev/sda1",
+            "RootDeviceType": "ebs",
+            "SecurityGroups": [
+                {
+                    "GroupName": "mark_SG_useast1",
+                    "GroupId": "sg-69e3fc1c"
+                }
+            ],
+            "SourceDestCheck": true,
+            "StateReason": {
+                "Code": "pending",
+                "Message": "pending"
+            },
+            "VirtualizationType": "hvm",
+            "CpuOptions": {
+                "CoreCount": 1,
+                "ThreadsPerCore": 2
+            },
+            "CapacityReservationSpecification": {
+                "CapacityReservationPreference": "open"
+            },
+            "MetadataOptions": {
+                "State": "pending",
+                "HttpTokens": "optional",
+                "HttpPutResponseHopLimit": 1,
+                "HttpEndpoint": "enabled"
+            }
+        }
+    ],
+    "OwnerId": "236189869841",
+    "ReservationId": "r-0f7608fd02f515d3d"
+}

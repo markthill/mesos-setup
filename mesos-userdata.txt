@@ -1,0 +1,52 @@
+#!/bin/bash
+
+apt-get update
+apt-get install -y awscli
+export AWS_DEFAULT_REGION=us-east-1
+
+INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
+PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+PUBLIC_HOSTNAME=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)
+
+
+# 100Gb drive - aws ec2 attach-volume --volume-id vol-04cd9820d81d1e436 --instance-id $INSTANCE_ID --device /dev/sdh
+
+# 20Gb drive
+aws ec2 attach-volume --volume-id vol-03c493cb42f7c3c9e --instance-id $INSTANCE_ID --device /dev/sdh
+
+
+apt-get update
+apt-get install -y tar wget git
+apt-get install -y openjdk-8-jdk
+apt-get install -y autoconf libtool
+apt-get -y install build-essential python-dev python-six python-virtualenv libcurl4-nss-dev libsasl2-dev libsasl2-modules maven libapr1-dev libsvn-dev zlib1g-dev iputils-ping
+apt install -y libssl-dev
+
+mkdir /home/ubuntu/.aws/
+printf "[default]\nregion = us-east-1" >> /home/ubuntu/.aws/config
+
+mkdir /data
+mount /dev/nvme1n1 /data
+
+echo "export MESOS_NATIVE_JAVA_LIBRARY=/data/apps/mesos/mesos-1.9.0/build/src/.libs/libmesos.so" >> /home/ubuntu/.profile
+echo "export LIBPROCESS_SSL_ENABLED=true" >> /home/ubuntu/.profile
+echo "export LIBPROCESS_SSL_VERIFY_SERVER_CERT=false" >> /home/ubuntu/.profile
+echo "export LIBPROCESS_SSL_REQUIRE_CLIENT_CERT=false" >> /home/ubuntu/.profile
+echo "export LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME=openssl" >> /home/ubuntu/.profile
+echo "export LIBPROCESS_SSL_ENABLE_DOWNGRADE=false" >> /home/ubuntu/.profile
+echo "export LIBPROCESS_SSL_KEY_FILE=/data/pki/mesos/key-np.pem" >> /home/ubuntu/.profile
+echo "export LIBPROCESS_SSL_CERT_FILE=/data/pki/mesos/cert-np.pem" >> /home/ubuntu/.profile
+echo "alias start-zoo=\"/data/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh start\"" >> /home/ubuntu/.profile
+echo "alias stop-zoo=\"/data/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh stop\"" >> /home/ubuntu/.profile
+echo "alias start-mesos-master=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --ip=$LOCAL_IP --hostname=$PUBLIC_HOSTNAME --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log 2>&1 &\"" >> /home/ubuntu/.profile
+echo "alias start-mesos-agent=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-agent.sh --master=$LOCAL_IP:5050 --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false --containerizers=docker --resources=\\\"ports(*):[80-81, 8000-9000, 31000-32000]\\\" >> /data/apps/mesos/logs/mesos-agent.log 2>&1 &\"" >> /home/ubuntu/.profile
+echo "alias start-marathon=\"/data/apps/marathon/marathon-1.5.0-96-gf84298d/bin/marathon --master $LOCAL_IP:5050 --zk zk://$LOCAL_IP:2181/marathon --http_port 8081  >> /data/apps/marathon/logs/marathon.log 2>&1 &\"" >> /home/ubuntu/.profile
+
+
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+apt-get update
+apt-cache policy docker-ce
+apt-get install -y docker-ce
+usermod -aG docker ubuntu
