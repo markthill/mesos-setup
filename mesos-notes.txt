@@ -53,13 +53,18 @@ aws ec2 run-instances --image-id ami-039a49e70ea773ffc --count 1 --instance-type
 --key-name ecs-key-pair-us-east-1 --security-group-ids sg-69e3fc1c --subnet-id subnet-d76fb78a --user-data \
 file:///Users/markthill/projects/containers/mesos/mesos-setup/mesos-userdata.txt | jq '.Instances[0].InstanceId'
 
-Instance ID: i-0a9f95562dd601b29
+Instance ID: i-035ccf9c6dcfaad1e
 
-aws ec2 describe-instances | jq '.Reservations[].Instances[] | select(.InstanceId == "i-0a9f95562dd601b29").PublicDnsName'
+aws ec2 describe-instances | jq '.Reservations[].Instances[] | select(.InstanceId == "i-035ccf9c6dcfaad1e").PublicDnsName'
+aws ec2 describe-instances | jq '.Reservations[].Instances[] | select(.InstanceId == "i-035ccf9c6dcfaad1e").PublicIpAddress'
 
 publlic DNS:  ec2-54-198-162-175.compute-1.amazonaws.com
+public IP: 54.162.22.55
+
+aws route53 change-resource-record-sets --hosted-zone-id Z1041029T0J3KKHUMS1H  --change-batch file://mesos.serversidesolutions.co.txt
 
 ssh -i /Users/markthill/projects/aws/key-pairs/ecs-key-pair-us-east-1.pem ubuntu@ec2-54-242-182-7.compute-1.amazonaws.com
+ssh -i /Users/markthill/projects/aws/key-pairs/ecs-key-pair-us-east-1.pem ubuntu@mesos.serversidesolutions.co
 
 start-zoo
 
@@ -110,9 +115,12 @@ master
 agent
 /data/apps/mesos/mesos-1.9.0/build/bin/mesos-agent.sh --master=172.31.40.84:5050 --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false --containerizers=docker --resources="ports(*):[80-81, 8000-9000, 31000-32000]"
 marathon
-/data/apps/marathon/marathon-1.5.0-96-gf84298d/bin/marathon --https_port 8082 --ssl_keystore_path /data/pki/mesos/mesoskeystore.jks --ssl_keystore_password foobar --master 172.31.40.84:5050 --zk zk://172.31.40.84:2181/marathon --disable_http --logging_level all
+/data/apps/marathon/marathon-1.5.0-96-gf84298d/bin/marathon --https_port 8082 --ssl_keystore_path /data/pki/mesos/mesoskeystore.jks --ssl_keystore_password foobar --master 172.31.40.84:5050 --zk zk://172.31.45.126:2181/marathon --disable_http --logging_level all
 
 
+docker
+-------------
+docker run --name some-nginx -d -p 8080:80 nginx
 
 
 ----------------------------------------------------------------
@@ -128,7 +136,7 @@ aws ec2 run-instances --image-id ami-039a49e70ea773ffc --count 1 --instance-type
 file:///Users/markthill/projects/containers/mesos/mesos-setup/zookeeper-userdata.txt  \
 --tag-specifications 'ResourceType=instance,Tags=[{Key=tier,Value=zookeeper}]' | jq '.Instances[0].InstanceId'
 
-instance-id:  i-08930d4096148ad74
+i-08930d4096148ad74
 
 aws ec2 describe-instances | jq '.Reservations[].Instances[] | select(.InstanceId == "i-08930d4096148ad74").PublicDnsName'
 
@@ -139,3 +147,77 @@ ssh -i /Users/markthill/projects/aws/key-pairs/ecs-key-pair-us-east-1.pem ubuntu
 
 MESOS MASTER/agent
 ----------------------------------------------------------------
+
+aws ec2 run-instances --image-id ami-039a49e70ea773ffc --count 1 --instance-type t3.medium --iam-instance-profile Name=zookeeperInstanceRole \
+--key-name ecs-key-pair-us-east-1 --security-group-ids sg-69e3fc1c --subnet-id subnet-d76fb78a --user-data \
+file:///Users/markthill/projects/containers/mesos/mesos-setup/mesos-userdata.txt | jq '.Instances[0].InstanceId'
+
+i-0dd36093356d94a53
+
+aws ec2 describe-instances | jq '.Reservations[].Instances[] | select(.InstanceId == "i-0dd36093356d94a53").PublicDnsName'
+
+dns:  ec2-3-94-250-51.compute-1.amazonaws.com
+
+ssh -i /Users/markthill/projects/aws/key-pairs/ecs-key-pair-us-east-1.pem ubuntu@ec2-3-81-14-42.compute-1.amazonaws.com
+ssh -i /Users/markthill/projects/aws/key-pairs/ecs-key-pair-us-east-1.pem ubuntu@mesos.serversidesolutions.co
+
+
+
+
+ENVIRONMENT
+  "env": {
+    "LIBPROCESS_SSL_REQUIRE_CLIENT_CERT": "true",
+    "LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME": "openssl",
+    "LIBPROCESS_SSL_CA_FILE": "/data/pki/mesos/cert-np.pem",
+    "LIBPROCESS_SSL_KEY_FILE": "/data/pki/mesos/key-np.pem",
+    "LIBPROCESS_SSL_ENABLED": "true",
+    "LIBPROCESS_SSL_CERT_FILE": "/data/pki/mesos/cert-np.pem",
+    "LIBPROCESS_SSL_VERIFY_SERVER_CERT": "false",
+    "LIBPROCESS_SSL_SUPPORT_DOWNGRADE": "false"
+  }
+
+{"LIBPROCESS_SSL_REQUIRE_CLIENT_CERT": "true","LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME": "openssl","LIBPROCESS_SSL_CA_FILE": "/data/pki/mesos/cert-np.pem","LIBPROCESS_SSL_KEY_FILE": "/data/pki/mesos/key-np.pem","LIBPROCESS_SSL_ENABLED": "true","LIBPROCESS_SSL_CERT_FILE": "/data/pki/mesos/cert-np.pem","LIBPROCESS_SSL_VERIFY_SERVER_CERT": "false","LIBPROCESS_SSL_SUPPORT_DOWNGRADE": "false"}
+
+
+
+Metrics
+---------------
+
+cAdvisor
+sudo docker run   --volume=/:/rootfs:ro   --volume=/var/run:/var/run:ro   --volume=/sys:/sys:ro   --volume=/var/lib/docker/:/var/lib/docker:ro   --volume=/dev/disk/:/dev/disk:ro   --publish=8083:8080   --detach=true   --name=cadvisor   --privileged   gcr.io/google-containers/cadvisor:$VERSION
+
+
+
+https://ec2-54-164-104-88.compute-1.amazonaws.com:5051/containers
+https://ec2-54-164-104-88.compute-1.amazonaws.com:8082/metrics/
+https://ec2-54-164-104-88.compute-1.amazonaws.com:8082/metrics/
+https://ec2-54-164-104-88.compute-1.amazonaws.com:8082/metrics/prometheus
+https://ec2-54-164-104-88.compute-1.amazonaws.com:8082/v2/apps/nginx
+https://ec2-54-164-104-88.compute-1.amazonaws.com:5050/metrics/snapshot
+https://ec2-54-164-104-88.compute-1.amazonaws.com:5051/metrics/snapshot
+https://mesos.serversidesolutions.co:5051/monitor/statistics/
+
+
+
+
+--dcos-master https://mesos.serversidesolutions.co:5050 --trigger_mode cpu --autoscale_multiplier 1.5 --max_instances 2 --marathon-app /nginx --min_instances 1 --cool_down_factor 4 --scale_up_factor 3 --interval 5 --min_range 55.0 --max_range 80.0
+
+
+{
+    "Comment": "Update A record for mesos",
+    "Changes": [
+        {
+            "Action": "UPSERT",
+            "ResourceRecordSet": {
+                "Name": "mesos.serversidesolutions.co",
+                "Type": "A",
+                "TTL": 300,
+                "ResourceRecords": [
+                    {
+                        "Value": "3.81.14.43"
+                    }
+                ]
+            }
+        }
+    ]
+}

@@ -1,0 +1,1448 @@
+{
+    "Parameters":{
+        "Application" : {
+            "Type" : "String",
+            "Default" : "apple",
+            "Description" : "Name of application"
+        },
+        "Environment" : {
+            "Type" : "String",
+            "Default" : "development",
+            "Description" : "Name of environment"
+        },
+        "MySnapShotId" : {
+            "Type" : "String",
+            "Default" : "snap-0906b55938a020ea6",
+            "Description" : "Master snapshot that contains all software zookeeper, mesos, and marathon"
+        },
+        "MyInstanceType":{
+            "Type" : "String",
+            "Default" : "t3.medium",
+            "Description" : "Instance Type for cluster"
+        },
+        "MyImageId":{
+            "Type" : "String",
+            "Default" : "ami-039a49e70ea773ffc",
+            "Description" : "Instance AMI Id (Ubuntu 18.04)"
+        },
+        "MyKeyName":{
+            "Type" : "String",
+            "Default" : "marcus_mesos_fun",
+            "Description" : "SSH Key for Instances"
+        },
+        "MySecurityGroupId":{
+            "Type" : "String",
+            "Default" : "sg-0badeb412d8db1ba3",
+            "Description" : "Security Group Id for Mesos / Marathon / Zookeeper Cluster"
+        },
+        "MySubnetIdA":{
+            "Type" : "String",
+            "Default" : "subnet-03a49bec3193956fd",
+            "Description" : "Sample SubnetId for all resources in AZ A"
+        },
+        "MyAZA":{
+            "Type" : "String",
+            "Default" : "us-east-1a",
+            "Description" : "Availability Zone A for mesos cluster"
+        },
+        "MySubnetIdB":{
+            "Type" : "String",
+            "Default" : "subnet-03a49bec3193956fd",
+            "Description" : "Sample SubnetId for all resources in AZ B"
+        },
+        "MyAZB":{
+            "Type" : "String",
+            "Default" : "us-east-1a",
+            "Description" : "Availability Zone B for mesos cluster"
+        },
+        "MySubnetIdC":{
+            "Type" : "String",
+            "Default" : "subnet-03a49bec3193956fd",
+            "Description" : "Sample SubnetId for all resources in AZ C"
+        },
+        "MyAZC":{
+            "Type" : "String",
+            "Default" : "us-east-1a",
+            "Description" : "Availability Zone C for mesos cluster"
+        },
+        "MyEBSSize": {
+            "Type" : "Number",
+            "Default" : "100",
+            "Description" : "EBS Volume Size for All instances"
+        }
+
+    },
+    "Resources": {
+        "ZookeeperENIA" : {
+            "Type" : "AWS::EC2::NetworkInterface",
+            "Properties" : {
+               "Tags": [{"Key":"foo","Value":"bar"}],
+               "Description": "Static IP Address for Zookeeper quorum member in us-east-1a",
+               "SourceDestCheck": "false",
+               "GroupSet": [{"Ref" :"MySecurityGroupId"}],
+               "SubnetId": {"Ref":"MySubnetIdA"}
+            }
+         },
+        "ZookeeperAEBS":{
+            "Type" : "AWS::EC2::Volume",
+            "Properties" : {
+                "AvailabilityZone" : { "Ref" : "MyAZA"},
+                "Size" : { "Ref" : "MyEBSSize"},
+                "SnapshotId" : {"Ref" : "MySnapShotId"},
+                "VolumeType" : "gp2",
+                "Tags" : [
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"zookeeper","ebs", { "Ref" : "MyAZA"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ]
+              }
+        },
+        "ZookeeperA": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "MyAZA"},
+                "IamInstanceProfile" : "EC2S3Access",
+                "InstanceType" : {"Ref" : "MyInstanceType"},
+                "ImageId" : {"Ref" : "MyImageId"},
+                "KeyName" : {"Ref" : "MyKeyName"},
+                "Volumes" : [
+                    {
+                        "Device" : "/dev/sdg",
+                        "VolumeId" : {"Ref" : "ZookeeperAEBS"} 
+                    } 
+                        
+                ],
+                "NetworkInterfaces" : [
+                    { "NetworkInterfaceId" : {"Ref" : "ZookeeperENIA"}, "DeviceIndex" : "0" }
+                ],
+                "Tags" : [ 
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"zookeeper", { "Ref" : "MyAZA"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ],
+                "UserData"       : { 
+                    "Fn::Base64" : { 
+                        "Fn::Join" : ["", [
+                            "#!/bin/bash \n",
+                            "apt-get update\n",
+                            "apt-get install -y awscli\n",
+                            "export AWS_DEFAULT_REGION=us-east-1\n",
+                            "echo 'export INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)' >> /home/ubuntu/.profile\n",
+                            "echo 'export LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_HOSTNAME=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)' >> /home/ubuntu/.profile\n",
+                            "#aws ec2 attach-volume --volume-id vol-03c493cb42f7c3c9e --instance-id $INSTANCE_ID --device /dev/sdh\n",
+                            "apt-get update\n",
+                            "apt-get install -y tar wget git\n",
+                            "apt-get install -y openjdk-8-jdk\n",
+                            "apt-get install -y autoconf libtool\n",
+                            "apt-get -y install build-essential python-dev python-six python-virtualenv libcurl4-nss-dev libsasl2-dev libsasl2-modules maven libapr1-dev libsvn-dev zlib1g-dev iputils-ping\n",
+                            "apt install -y libssl-dev\n",
+                            "mkdir /home/ubuntu/.aws/\n",
+                            "printf '[default]\nregion = us-east-1' >> /home/ubuntu/.aws/config\n",
+                            "mkdir /data\n",
+                            "mount /dev/nvme1n1 /data\n",
+                            "echo 'export MESOS_NATIVE_JAVA_LIBRARY=/data/apps/mesos/mesos-1.9.0/build/src/.libs/libmesos.so' >> /home/ubuntu/.profile\n",
+                            "echo 'export MESOS_EXECUTOR_ENVIRONMENT_VARIABLES=file://data/apps/mesos/conf/executor_environment_variables.json' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLED=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_VERIFY_SERVER_CERT=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_REQUIRE_CLIENT_CERT=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME=openssl' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLE_DOWNGRADE=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_KEY_FILE=/data/pki/mesos/key-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_CERT_FILE=/data/pki/mesos/cert-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-zoo=\"/data/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh start\"' >> /home/ubuntu/.profile\n",
+                            "echo 'alias stop-zoo=\"/data/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh stop\"' >> /home/ubuntu/.profile\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -\n",
+                            "add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable'\n",
+                            "apt-get update\n",
+                            "apt-cache policy docker-ce\n",
+                            "apt-get install -y docker-ce\n",
+                            "usermod -aG docker ubuntu \n",
+                            "echo '1' > /data/apps/zookeeper/data/myid\n",
+                            "echo 'initLimit=5' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'syncLimit=2' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'server.1=",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2888:3888' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'server.2=",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2888:3888' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'server.3=",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2888:3888' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'install done for",{ "Ref" : "AWS::StackName" },"' > /root/test.txt\n",
+                            "runuser -l ubuntu -c '/data/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh start'\n",
+                            "aws ec2 create-tags --resources `curl -s http://169.254.169.254/latest/meta-data/instance-id` --tags Key=UserdataCompleted,Value=\"`date`\"\n"
+                        ]]
+                    }
+                }
+            }
+        },
+
+
+        "ZookeeperENIB" : {
+            "Type" : "AWS::EC2::NetworkInterface",
+            "Properties" : {
+               "Tags": [{"Key":"foo","Value":"bar"}],
+               "Description": "Static IP Address for Zookeeper quorum member in us-east-1b",
+               "SourceDestCheck": "false",
+               "GroupSet": [{"Ref" :"MySecurityGroupId"}],
+               "SubnetId": {"Ref":"MySubnetIdB"}
+            }
+         },
+        "ZookeeperBEBS":{
+            "Type" : "AWS::EC2::Volume",
+            "Properties" : {
+                "AvailabilityZone" : { "Ref" : "MyAZB"},
+                "Size" : { "Ref" : "MyEBSSize"},
+                "SnapshotId" : {"Ref" : "MySnapShotId"},
+                "VolumeType" : "gp2",
+                "Tags" : [
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"zookeeper","ebs", { "Ref" : "MyAZB"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ]
+              }
+        },
+        "ZookeeperB": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "MyAZB"},
+                "IamInstanceProfile" : "EC2S3Access",
+                "InstanceType" : {"Ref" : "MyInstanceType"},
+                "ImageId" : {"Ref" : "MyImageId"},
+                "KeyName" : {"Ref" : "MyKeyName"},
+                "Volumes" : [
+                    {
+                        "Device" : "/dev/sdg",
+                        "VolumeId" : {"Ref" : "ZookeeperBEBS"} 
+                    } 
+                        
+                ],
+                "NetworkInterfaces" : [
+                    { "NetworkInterfaceId" : {"Ref" : "ZookeeperENIB"}, "DeviceIndex" : "0" }
+                ],
+                "Tags" : [ 
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"zookeeper", { "Ref" : "MyAZB"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ],
+                "UserData"       : { 
+                    "Fn::Base64" : { 
+                        "Fn::Join" : ["", [
+                            "#!/bin/bash \n",
+                            "apt-get update\n",
+                            "apt-get install -y awscli\n",
+                            "export AWS_DEFAULT_REGION=us-east-1\n",
+                            "echo 'export INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)' >> /home/ubuntu/.profile\n",
+                            "echo 'export LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_HOSTNAME=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)' >> /home/ubuntu/.profile\n",
+                            "#aws ec2 attach-volume --volume-id vol-03c493cb42f7c3c9e --instance-id $INSTANCE_ID --device /dev/sdh\n",
+                            "apt-get update\n",
+                            "apt-get install -y tar wget git\n",
+                            "apt-get install -y openjdk-8-jdk\n",
+                            "apt-get install -y autoconf libtool\n",
+                            "apt-get -y install build-essential python-dev python-six python-virtualenv libcurl4-nss-dev libsasl2-dev libsasl2-modules maven libapr1-dev libsvn-dev zlib1g-dev iputils-ping\n",
+                            "apt install -y libssl-dev\n",
+                            "mkdir /home/ubuntu/.aws/\n",
+                            "printf '[default]\nregion = us-east-1' >> /home/ubuntu/.aws/config\n",
+                            "mkdir /data\n",
+                            "mount /dev/nvme1n1 /data\n",
+                            "echo 'export MESOS_NATIVE_JAVA_LIBRARY=/data/apps/mesos/mesos-1.9.0/build/src/.libs/libmesos.so' >> /home/ubuntu/.profile\n",
+                            "echo 'export MESOS_EXECUTOR_ENVIRONMENT_VARIABLES=file://data/apps/mesos/conf/executor_environment_variables.json' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLED=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_VERIFY_SERVER_CERT=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_REQUIRE_CLIENT_CERT=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME=openssl' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLE_DOWNGRADE=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_KEY_FILE=/data/pki/mesos/key-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_CERT_FILE=/data/pki/mesos/cert-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-zoo=\"/data/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh start\"' >> /home/ubuntu/.profile\n",
+                            "echo 'alias stop-zoo=\"/data/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh stop\"' >> /home/ubuntu/.profile\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -\n",
+                            "add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable'\n",
+                            "apt-get update\n",
+                            "apt-cache policy docker-ce\n",
+                            "apt-get install -y docker-ce\n",
+                            "usermod -aG docker ubuntu \n",
+                            "echo '2' > /data/apps/zookeeper/data/myid\n",
+                            "echo 'initLimit=5' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'syncLimit=2' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'server.1=",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2888:3888' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'server.2=",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2888:3888' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'server.3=",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2888:3888' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'install done for",{ "Ref" : "AWS::StackName" },"' > /root/test.txt\n",
+                            "runuser -l ubuntu -c '/data/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh start'\n",
+                            "aws ec2 create-tags --resources `curl -s http://169.254.169.254/latest/meta-data/instance-id` --tags Key=UserdataCompleted,Value=\"`date`\"\n"
+                        ]]
+                    }
+                }
+            }
+        },
+
+
+        "ZookeeperENIC" : {
+            "Type" : "AWS::EC2::NetworkInterface",
+            "Properties" : {
+               "Tags": [{"Key":"foo","Value":"bar"}],
+               "Description": "Static IP Address for Zookeeper quorum member in us-east-1c",
+               "SourceDestCheck": "false",
+               "GroupSet": [{"Ref" :"MySecurityGroupId"}],
+               "SubnetId": {"Ref":"MySubnetIdC"}
+            }
+         },
+        "ZookeeperCEBS":{
+            "Type" : "AWS::EC2::Volume",
+            "Properties" : {
+                "AvailabilityZone" : { "Ref" : "MyAZC"},
+                "Size" : { "Ref" : "MyEBSSize"},
+                "SnapshotId" : {"Ref" : "MySnapShotId"},
+                "VolumeType" : "gp2",
+                "Tags" : [
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"zookeeper","ebs", { "Ref" : "MyAZC"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ]
+              }
+        },
+        "ZookeeperC": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "MyAZC"},
+                "IamInstanceProfile" : "EC2S3Access",
+                "InstanceType" : {"Ref" : "MyInstanceType"},
+                "ImageId" : {"Ref" : "MyImageId"},
+                "KeyName" : {"Ref" : "MyKeyName"},
+                "Volumes" : [
+                    {
+                        "Device" : "/dev/sdg",
+                        "VolumeId" : {"Ref" : "ZookeeperCEBS"} 
+                    } 
+                        
+                ],
+                "NetworkInterfaces" : [
+                    { "NetworkInterfaceId" : {"Ref" : "ZookeeperENIC"}, "DeviceIndex" : "0" }
+                ],
+                "Tags" : [ 
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"zookeeper", { "Ref" : "MyAZC"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ],
+                "UserData"       : { 
+                    "Fn::Base64" : { 
+                        "Fn::Join" : ["", [
+                            "#!/bin/bash \n",
+                            "apt-get update\n",
+                            "apt-get install -y awscli\n",
+                            "export AWS_DEFAULT_REGION=us-east-1\n",
+                            "echo 'export INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)' >> /home/ubuntu/.profile\n",
+                            "echo 'export LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_HOSTNAME=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)' >> /home/ubuntu/.profile\n",
+                            "#aws ec2 attach-volume --volume-id vol-03c493cb42f7c3c9e --instance-id $INSTANCE_ID --device /dev/sdh\n",
+                            "apt-get update\n",
+                            "apt-get install -y tar wget git\n",
+                            "apt-get install -y openjdk-8-jdk\n",
+                            "apt-get install -y autoconf libtool\n",
+                            "apt-get -y install build-essential python-dev python-six python-virtualenv libcurl4-nss-dev libsasl2-dev libsasl2-modules maven libapr1-dev libsvn-dev zlib1g-dev iputils-ping\n",
+                            "apt install -y libssl-dev\n",
+                            "mkdir /home/ubuntu/.aws/\n",
+                            "printf '[default]\nregion = us-east-1' >> /home/ubuntu/.aws/config\n",
+                            "mkdir /data\n",
+                            "mount /dev/nvme1n1 /data\n",
+                            "echo 'export MESOS_NATIVE_JAVA_LIBRARY=/data/apps/mesos/mesos-1.9.0/build/src/.libs/libmesos.so' >> /home/ubuntu/.profile\n",
+                            "echo 'export MESOS_EXECUTOR_ENVIRONMENT_VARIABLES=file://data/apps/mesos/conf/executor_environment_variables.json' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLED=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_VERIFY_SERVER_CERT=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_REQUIRE_CLIENT_CERT=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME=openssl' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLE_DOWNGRADE=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_KEY_FILE=/data/pki/mesos/key-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_CERT_FILE=/data/pki/mesos/cert-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-zoo=\"/data/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh start\"' >> /home/ubuntu/.profile\n",
+                            "echo 'alias stop-zoo=\"/data/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh stop\"' >> /home/ubuntu/.profile\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -\n",
+                            "add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable'\n",
+                            "apt-get update\n",
+                            "apt-cache policy docker-ce\n",
+                            "apt-get install -y docker-ce\n",
+                            "usermod -aG docker ubuntu \n",
+                            "echo '3' > /data/apps/zookeeper/data/myid\n",
+                            "echo 'initLimit=5' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'syncLimit=2' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'server.1=",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2888:3888' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'server.2=",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2888:3888' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'server.3=",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2888:3888' >> /data/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'install done for",{ "Ref" : "AWS::StackName" },"' > /root/test.txt\n",
+                            "runuser -l ubuntu -c '/data/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh start'\n",
+                            "aws ec2 create-tags --resources `curl -s http://169.254.169.254/latest/meta-data/instance-id` --tags Key=UserdataCompleted,Value=\"`date`\"\n"
+                        ]]
+                    }
+                }
+            }
+        },
+
+
+
+        "MesosMasterAEBS":{
+            "Type" : "AWS::EC2::Volume",
+            "Properties" : {
+                "AvailabilityZone" : { "Ref" : "MyAZA"},
+                "Size" : { "Ref" : "MyEBSSize"},
+                "SnapshotId" : {"Ref" : "MySnapShotId"},
+                "VolumeType" : "gp2",
+                "Tags" : [
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"mesosmaster","ebs", { "Ref" : "MyAZA"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ]
+              }
+        },
+        "MesosMasterA": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "MyAZA"},
+                "IamInstanceProfile" : "EC2S3Access",
+                "InstanceType" : {"Ref" : "MyInstanceType"},
+                "ImageId" : {"Ref" : "MyImageId"},
+                "KeyName" : {"Ref" : "MyKeyName"},
+                "SecurityGroupIds" : [{"Ref" : "MySecurityGroupId"}],
+                "SubnetId" : {"Ref" : "MySubnetIdA"},
+                "Volumes" : [
+                    {
+                        "Device" : "/dev/sdg",
+                        "VolumeId" : {"Ref" : "MesosMasterAEBS"} 
+                    } 
+                        
+                ],
+                "Tags" : [ 
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"mesosmaster", { "Ref" : "MyAZA"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ],
+                "UserData"       : { 
+                    "Fn::Base64" : { 
+                        "Fn::Join" : ["", [
+                            "#!/bin/bash \n",
+                            "apt-get update\n",
+                            "apt-get install -y awscli\n",
+                            "export AWS_DEFAULT_REGION=us-east-1\n",
+                            "echo 'export INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)' >> /home/ubuntu/.profile\n",
+                            "echo 'export LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_HOSTNAME=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)' >> /home/ubuntu/.profile\n",
+                            "#aws ec2 attach-volume --volume-id vol-03c493cb42f7c3c9e --instance-id $INSTANCE_ID --device /dev/sdh\n",
+                            "apt-get update\n",
+                            "apt-get install -y tar wget git\n",
+                            "apt-get install -y openjdk-8-jdk\n",
+                            "apt-get install -y autoconf libtool\n",
+                            "apt-get -y install build-essential python-dev python-six python-virtualenv libcurl4-nss-dev libsasl2-dev libsasl2-modules maven libapr1-dev libsvn-dev zlib1g-dev iputils-ping\n",
+                            "apt install -y libssl-dev\n",
+                            "mkdir /home/ubuntu/.aws/\n",
+                            "printf '[default]\nregion = us-east-1' >> /home/ubuntu/.aws/config\n",
+                            "mkdir /data\n",
+                            "mount /dev/nvme1n1 /data\n",
+                            "echo 'export MESOS_NATIVE_JAVA_LIBRARY=/data/apps/mesos/mesos-1.9.0/build/src/.libs/libmesos.so' >> /home/ubuntu/.profile\n",
+                            "echo 'export MESOS_EXECUTOR_ENVIRONMENT_VARIABLES=file://data/apps/mesos/conf/executor_environment_variables.json' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLED=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_VERIFY_SERVER_CERT=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_REQUIRE_CLIENT_CERT=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME=openssl' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLE_DOWNGRADE=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_KEY_FILE=/data/pki/mesos/key-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_CERT_FILE=/data/pki/mesos/cert-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-master=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --zk=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --quorum=2 --ip=$LOCAL_IP --hostname=$PUBLIC_IP --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -\n",
+                            "add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable'\n",
+                            "apt-get update\n",
+                            "sudo apt-get install apt-transport-https ca-certificates curl software-properties-common\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - \n",
+                            "sudo add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable'\n",
+                            "sudo apt update\n",
+                            "apt-cache search docker-ce\n",
+                            "apt-cache policy docker-ce\n",
+                            "sudo apt-get install -y docker-ce\n",
+                            "usermod -aG docker ubuntu \n",
+                            "echo 'install done for { \"Ref\" : \"AWS::StackName\" }' > /root/test.txt\n",
+                            "runuser -l ubuntu -c 'source ~/.profile && /data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --zk=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --quorum=2 --ip=$LOCAL_IP --hostname=$PUBLIC_IP --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log 2>&1 &'\n",
+                            "aws ec2 create-tags --resources `curl -s http://169.254.169.254/latest/meta-data/instance-id` --tags Key=UserdataCompleted,Value=\"`date`\"\n"
+                        ]]
+                    }
+                }
+            }
+        },
+
+
+
+
+        "MesosMasterBEBS":{
+            "Type" : "AWS::EC2::Volume",
+            "Properties" : {
+                "AvailabilityZone" : { "Ref" : "MyAZB"},
+                "Size" : { "Ref" : "MyEBSSize"},
+                "SnapshotId" : {"Ref" : "MySnapShotId"},
+                "VolumeType" : "gp2",
+                "Tags" : [
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"mesosmaster","ebs", { "Ref" : "MyAZB"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ]
+              }
+        },
+        "MesosMasterB": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "MyAZB"},
+                "IamInstanceProfile" : "EC2S3Access",
+                "InstanceType" : {"Ref" : "MyInstanceType"},
+                "ImageId" : {"Ref" : "MyImageId"},
+                "KeyName" : {"Ref" : "MyKeyName"},
+                "SecurityGroupIds" : [{"Ref" : "MySecurityGroupId"}],
+                "SubnetId" : {"Ref" : "MySubnetIdB"},
+                "Volumes" : [
+                    {
+                        "Device" : "/dev/sdg",
+                        "VolumeId" : {"Ref" : "MesosMasterBEBS"} 
+                    } 
+                        
+                ],
+                "Tags" : [ 
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"mesosmaster", { "Ref" : "MyAZA"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ],
+                "UserData"       : { 
+                    "Fn::Base64" : { 
+                        "Fn::Join" : ["", [
+                            "#!/bin/bash \n",
+                            "apt-get update\n",
+                            "apt-get install -y awscli\n",
+                            "export AWS_DEFAULT_REGION=us-east-1\n",
+                            "echo 'export INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)' >> /home/ubuntu/.profile\n",
+                            "echo 'export LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_HOSTNAME=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)' >> /home/ubuntu/.profile\n",
+                            "#aws ec2 attach-volume --volume-id vol-03c493cb42f7c3c9e --instance-id $INSTANCE_ID --device /dev/sdh\n",
+                            "apt-get update\n",
+                            "apt-get install -y tar wget git\n",
+                            "apt-get install -y openjdk-8-jdk\n",
+                            "apt-get install -y autoconf libtool\n",
+                            "apt-get -y install build-essential python-dev python-six python-virtualenv libcurl4-nss-dev libsasl2-dev libsasl2-modules maven libapr1-dev libsvn-dev zlib1g-dev iputils-ping\n",
+                            "apt install -y libssl-dev\n",
+                            "mkdir /home/ubuntu/.aws/\n",
+                            "printf '[default]\nregion = us-east-1' >> /home/ubuntu/.aws/config\n",
+                            "mkdir /data\n",
+                            "mount /dev/nvme1n1 /data\n",
+                            "echo 'export MESOS_NATIVE_JAVA_LIBRARY=/data/apps/mesos/mesos-1.9.0/build/src/.libs/libmesos.so' >> /home/ubuntu/.profile\n",
+                            "echo 'export MESOS_EXECUTOR_ENVIRONMENT_VARIABLES=file://data/apps/mesos/conf/executor_environment_variables.json' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLED=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_VERIFY_SERVER_CERT=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_REQUIRE_CLIENT_CERT=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME=openssl' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLE_DOWNGRADE=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_KEY_FILE=/data/pki/mesos/key-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_CERT_FILE=/data/pki/mesos/cert-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-master=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --zk=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --quorum=2 --ip=$LOCAL_IP --hostname=$PUBLIC_IP --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -\n",
+                            "add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable'\n",
+                            "apt-get update\n",
+                            "sudo apt-get install apt-transport-https ca-certificates curl software-properties-common\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - \n",
+                            "sudo add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable'\n",
+                            "sudo apt update\n",
+                            "apt-cache search docker-ce\n",
+                            "apt-cache policy docker-ce\n",
+                            "sudo apt-get install -y docker-ce\n",
+                            "usermod -aG docker ubuntu \n",
+                            "echo 'install done for { \"Ref\" : \"AWS::StackName\" }' > /root/test.txt\n",
+                            "runuser -l ubuntu -c 'source ~/.profile && /data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --zk=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --quorum=2 --ip=$LOCAL_IP --hostname=$PUBLIC_IP --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log 2>&1 &'\n",
+                            "aws ec2 create-tags --resources `curl -s http://169.254.169.254/latest/meta-data/instance-id` --tags Key=UserdataCompleted,Value=\"`date`\"\n"
+                        ]]
+                    }
+                }
+            }
+        },
+
+
+        "MesosMasterCEBS":{
+            "Type" : "AWS::EC2::Volume",
+            "Properties" : {
+                "AvailabilityZone" : { "Ref" : "MyAZC"},
+                "Size" : { "Ref" : "MyEBSSize"},
+                "SnapshotId" : {"Ref" : "MySnapShotId"},
+                "VolumeType" : "gp2",
+                "Tags" : [
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"mesosmaster","ebs", { "Ref" : "MyAZC"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ]
+              }
+        },
+        "MesosMasterC": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "MyAZC"},
+                "IamInstanceProfile" : "EC2S3Access",
+                "InstanceType" : {"Ref" : "MyInstanceType"},
+                "ImageId" : {"Ref" : "MyImageId"},
+                "KeyName" : {"Ref" : "MyKeyName"},
+                "SecurityGroupIds" : [{"Ref" : "MySecurityGroupId"}],
+                "SubnetId" : {"Ref" : "MySubnetIdC"},
+                "Volumes" : [
+                    {
+                        "Device" : "/dev/sdg",
+                        "VolumeId" : {"Ref" : "MesosMasterCEBS"} 
+                    } 
+                        
+                ],
+                "Tags" : [ 
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"mesosmaster", { "Ref" : "MyAZC"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ],
+                "UserData"       : { 
+                    "Fn::Base64" : { 
+                        "Fn::Join" : ["", [
+                            "#!/bin/bash \n",
+                            "apt-get update\n",
+                            "apt-get install -y awscli\n",
+                            "export AWS_DEFAULT_REGION=us-east-1\n",
+                            "echo 'export INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)' >> /home/ubuntu/.profile\n",
+                            "echo 'export LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_HOSTNAME=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)' >> /home/ubuntu/.profile\n",
+                            "#aws ec2 attach-volume --volume-id vol-03c493cb42f7c3c9e --instance-id $INSTANCE_ID --device /dev/sdh\n",
+                            "apt-get update\n",
+                            "apt-get install -y tar wget git\n",
+                            "apt-get install -y openjdk-8-jdk\n",
+                            "apt-get install -y autoconf libtool\n",
+                            "apt-get -y install build-essential python-dev python-six python-virtualenv libcurl4-nss-dev libsasl2-dev libsasl2-modules maven libapr1-dev libsvn-dev zlib1g-dev iputils-ping\n",
+                            "apt install -y libssl-dev\n",
+                            "mkdir /home/ubuntu/.aws/\n",
+                            "printf '[default]\nregion = us-east-1' >> /home/ubuntu/.aws/config\n",
+                            "mkdir /data\n",
+                            "mount /dev/nvme1n1 /data\n",
+                            "echo 'export MESOS_NATIVE_JAVA_LIBRARY=/data/apps/mesos/mesos-1.9.0/build/src/.libs/libmesos.so' >> /home/ubuntu/.profile\n",
+                            "echo 'export MESOS_EXECUTOR_ENVIRONMENT_VARIABLES=file://data/apps/mesos/conf/executor_environment_variables.json' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLED=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_VERIFY_SERVER_CERT=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_REQUIRE_CLIENT_CERT=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME=openssl' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLE_DOWNGRADE=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_KEY_FILE=/data/pki/mesos/key-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_CERT_FILE=/data/pki/mesos/cert-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-master=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --zk=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --quorum=2 --ip=$LOCAL_IP --hostname=$PUBLIC_IP --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -\n",
+                            "add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable'\n",
+                            "apt-get update\n",
+                            "sudo apt-get install apt-transport-https ca-certificates curl software-properties-common\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - \n",
+                            "sudo add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable'\n",
+                            "sudo apt update\n",
+                            "apt-cache search docker-ce\n",
+                            "apt-cache policy docker-ce\n",
+                            "sudo apt-get install -y docker-ce\n",
+                            "usermod -aG docker ubuntu \n",
+                            "echo 'install done for { \"Ref\" : \"AWS::StackName\" }' > /root/test.txt\n",
+                            "runuser -l ubuntu -c 'source ~/.profile && /data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --zk=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --quorum=2 --ip=$LOCAL_IP --hostname=$PUBLIC_IP --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log 2>&1 &'\n",
+                            "aws ec2 create-tags --resources `curl -s http://169.254.169.254/latest/meta-data/instance-id` --tags Key=UserdataCompleted,Value=\"`date`\"\n"
+                        ]]
+                    }
+                }
+            }
+        },
+
+
+
+
+
+
+
+
+        "MesosAgentAEBS":{
+            "Type" : "AWS::EC2::Volume",
+            "Properties" : {
+                "AvailabilityZone" : { "Ref" : "MyAZA"},
+                "Size" : { "Ref" : "MyEBSSize"},
+                "SnapshotId" : {"Ref" : "MySnapShotId"},
+                "VolumeType" : "gp2",
+                "Tags" : [
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"mesosagent","ebs", { "Ref" : "MyAZA"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ]
+              }
+        },
+        "MesosAgentA": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "MyAZA"},
+                "IamInstanceProfile" : "EC2S3Access",
+                "InstanceType" : {"Ref" : "MyInstanceType"},
+                "ImageId" : {"Ref" : "MyImageId"},
+                "KeyName" : {"Ref" : "MyKeyName"},
+                "SecurityGroupIds" : [{"Ref" : "MySecurityGroupId"}],
+                "SubnetId" : {"Ref" : "MySubnetIdA"},
+                "Volumes" : [
+                    {
+                        "Device" : "/dev/sdg",
+                        "VolumeId" : {"Ref" : "MesosAgentAEBS"} 
+                    } 
+                        
+                ],
+                "Tags" : [ 
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"mesosagent", { "Ref" : "MyAZA"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ],
+                "UserData"       : { 
+                    "Fn::Base64" : { 
+                        "Fn::Join" : ["", [
+                            "#!/bin/bash \n",
+                            "apt-get update\n",
+                            "apt-get install -y awscli\n",
+                            "export AWS_DEFAULT_REGION=us-east-1\n",
+                            "echo 'export INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)' >> /home/ubuntu/.profile\n",
+                            "echo 'export LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_HOSTNAME=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)' >> /home/ubuntu/.profile\n",
+                            "#aws ec2 attach-volume --volume-id vol-03c493cb42f7c3c9e --instance-id $INSTANCE_ID --device /dev/sdh\n",
+                            "apt-get update\n",
+                            "apt-get install -y tar wget git\n",
+                            "apt-get install -y openjdk-8-jdk\n",
+                            "apt-get install -y autoconf libtool\n",
+                            "apt-get -y install build-essential python-dev python-six python-virtualenv libcurl4-nss-dev libsasl2-dev libsasl2-modules maven libapr1-dev libsvn-dev zlib1g-dev iputils-ping\n",
+                            "apt install -y libssl-dev\n",
+                            "mkdir /home/ubuntu/.aws/\n",
+                            "printf '[default]\nregion = us-east-1' >> /home/ubuntu/.aws/config\n",
+                            "mkdir /data\n",
+                            "mount /dev/nvme1n1 /data\n",
+                            "echo 'export MESOS_NATIVE_JAVA_LIBRARY=/data/apps/mesos/mesos-1.9.0/build/src/.libs/libmesos.so' >> /home/ubuntu/.profile\n",
+                            "echo 'export MESOS_EXECUTOR_ENVIRONMENT_VARIABLES=file://data/apps/mesos/conf/executor_environment_variables.json' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLED=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_VERIFY_SERVER_CERT=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_REQUIRE_CLIENT_CERT=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME=openssl' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLE_DOWNGRADE=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_KEY_FILE=/data/pki/mesos/key-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_CERT_FILE=/data/pki/mesos/cert-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-master=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --zk=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --quorum=1 --ip=$LOCAL_IP --hostname=$LOCAL_IP --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-agent=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-agent.sh --master=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false --containerizers=docker --executor_environment_variables=file:///data/apps/mesos/conf/executor_environment_variables.json  >> /data/apps/mesos/logs/mesos-agent.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -\n",
+                            "add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable'\n",
+                            "apt-get update\n",
+                            "sudo apt-get install apt-transport-https ca-certificates curl software-properties-common\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - \n",
+                            "sudo add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable'\n",
+                            "sudo apt update\n",
+                            "apt-cache search docker-ce\n",
+                            "apt-cache policy docker-ce\n",
+                            "sudo apt-get install -y docker-ce\n",
+                            "usermod -aG docker ubuntu \n",
+                            "echo 'install done for { \"Ref\" : \"AWS::StackName\" }' > /root/test.txt\n",
+                            "runuser -l ubuntu -c 'source ~/.profile && /data/apps/mesos/mesos-1.9.0/build/bin/mesos-agent.sh --master=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false --containerizers=docker --executor_environment_variables=file:///data/apps/mesos/conf/executor_environment_variables.json  >> /data/apps/mesos/logs/mesos-agent.log 2>&1 &'\n",
+                            "aws ec2 create-tags --resources `curl -s http://169.254.169.254/latest/meta-data/instance-id` --tags Key=UserdataCompleted,Value=\"`date`\"\n"
+                        ]]
+                    }
+                }
+            }
+        },
+
+
+
+        "MesosAgentBEBS":{
+            "Type" : "AWS::EC2::Volume",
+            "Properties" : {
+                "AvailabilityZone" : { "Ref" : "MyAZB"},
+                "Size" : { "Ref" : "MyEBSSize"},
+                "SnapshotId" : {"Ref" : "MySnapShotId"},
+                "VolumeType" : "gp2",
+                "Tags" : [
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"mesosagent","ebs", { "Ref" : "MyAZB"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ]
+              }
+        },
+        "MesosAgentB": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "MyAZB"},
+                "IamInstanceProfile" : "EC2S3Access",
+                "InstanceType" : {"Ref" : "MyInstanceType"},
+                "ImageId" : {"Ref" : "MyImageId"},
+                "KeyName" : {"Ref" : "MyKeyName"},
+                "SecurityGroupIds" : [{"Ref" : "MySecurityGroupId"}],
+                "SubnetId" : {"Ref" : "MySubnetIdB"},
+                "Volumes" : [
+                    {
+                        "Device" : "/dev/sdg",
+                        "VolumeId" : {"Ref" : "MesosAgentBEBS"} 
+                    } 
+                        
+                ],
+                "Tags" : [ 
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"mesosagent", { "Ref" : "MyAZB"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ],
+                "UserData"       : { 
+                    "Fn::Base64" : { 
+                        "Fn::Join" : ["", [
+                            "#!/bin/bash \n",
+                            "apt-get update\n",
+                            "apt-get install -y awscli\n",
+                            "export AWS_DEFAULT_REGION=us-east-1\n",
+                            "echo 'export INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)' >> /home/ubuntu/.profile\n",
+                            "echo 'export LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_HOSTNAME=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)' >> /home/ubuntu/.profile\n",
+                            "#aws ec2 attach-volume --volume-id vol-03c493cb42f7c3c9e --instance-id $INSTANCE_ID --device /dev/sdh\n",
+                            "apt-get update\n",
+                            "apt-get install -y tar wget git\n",
+                            "apt-get install -y openjdk-8-jdk\n",
+                            "apt-get install -y autoconf libtool\n",
+                            "apt-get -y install build-essential python-dev python-six python-virtualenv libcurl4-nss-dev libsasl2-dev libsasl2-modules maven libapr1-dev libsvn-dev zlib1g-dev iputils-ping\n",
+                            "apt install -y libssl-dev\n",
+                            "mkdir /home/ubuntu/.aws/\n",
+                            "printf '[default]\nregion = us-east-1' >> /home/ubuntu/.aws/config\n",
+                            "mkdir /data\n",
+                            "mount /dev/nvme1n1 /data\n",
+                            "echo 'export MESOS_NATIVE_JAVA_LIBRARY=/data/apps/mesos/mesos-1.9.0/build/src/.libs/libmesos.so' >> /home/ubuntu/.profile\n",
+                            "echo 'export MESOS_EXECUTOR_ENVIRONMENT_VARIABLES=file://data/apps/mesos/conf/executor_environment_variables.json' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLED=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_VERIFY_SERVER_CERT=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_REQUIRE_CLIENT_CERT=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME=openssl' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLE_DOWNGRADE=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_KEY_FILE=/data/pki/mesos/key-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_CERT_FILE=/data/pki/mesos/cert-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-master=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --zk=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --quorum=1 --ip=$LOCAL_IP --hostname=$LOCAL_IP --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-agent=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-agent.sh --master=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false --containerizers=docker --executor_environment_variables=file:///data/apps/mesos/conf/executor_environment_variables.json  >> /data/apps/mesos/logs/mesos-agent.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -\n",
+                            "add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable'\n",
+                            "apt-get update\n",
+                            "sudo apt-get install apt-transport-https ca-certificates curl software-properties-common\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - \n",
+                            "sudo add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable'\n",
+                            "sudo apt update\n",
+                            "apt-cache search docker-ce\n",
+                            "apt-cache policy docker-ce\n",
+                            "sudo apt-get install -y docker-ce\n",
+                            "usermod -aG docker ubuntu \n",
+                            "echo 'install done for { \"Ref\" : \"AWS::StackName\" }' > /root/test.txt\n",
+                            "runuser -l ubuntu -c 'source ~/.profile && /data/apps/mesos/mesos-1.9.0/build/bin/mesos-agent.sh --master=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false --containerizers=docker --executor_environment_variables=file:///data/apps/mesos/conf/executor_environment_variables.json  >> /data/apps/mesos/logs/mesos-agent.log 2>&1 &'\n",
+                            "aws ec2 create-tags --resources `curl -s http://169.254.169.254/latest/meta-data/instance-id` --tags Key=UserdataCompleted,Value=\"`date`\"\n"
+                        ]]
+                    }
+                }
+            }
+        },
+
+
+
+
+
+
+
+        "MesosAgentCEBS":{
+            "Type" : "AWS::EC2::Volume",
+            "Properties" : {
+                "AvailabilityZone" : { "Ref" : "MyAZC"},
+                "Size" : { "Ref" : "MyEBSSize"},
+                "SnapshotId" : {"Ref" : "MySnapShotId"},
+                "VolumeType" : "gp2",
+                "Tags" : [
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"mesosagent","ebs", { "Ref" : "MyAZC"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ]
+              }
+        },
+        "MesosAgentC": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "MyAZC"},
+                "IamInstanceProfile" : "EC2S3Access",
+                "InstanceType" : {"Ref" : "MyInstanceType"},
+                "ImageId" : {"Ref" : "MyImageId"},
+                "KeyName" : {"Ref" : "MyKeyName"},
+                "SecurityGroupIds" : [{"Ref" : "MySecurityGroupId"}],
+                "SubnetId" : {"Ref" : "MySubnetIdC"},
+                "Volumes" : [
+                    {
+                        "Device" : "/dev/sdg",
+                        "VolumeId" : {"Ref" : "MesosAgentCEBS"} 
+                    } 
+                        
+                ],
+                "Tags" : [ 
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"mesosagent", { "Ref" : "MyAZC"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ],
+                "UserData"       : { 
+                    "Fn::Base64" : { 
+                        "Fn::Join" : ["", [
+                            "#!/bin/bash \n",
+                            "apt-get update\n",
+                            "apt-get install -y awscli\n",
+                            "export AWS_DEFAULT_REGION=us-east-1\n",
+                            "echo 'export INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)' >> /home/ubuntu/.profile\n",
+                            "echo 'export LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_HOSTNAME=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)' >> /home/ubuntu/.profile\n",
+                            "#aws ec2 attach-volume --volume-id vol-03c493cb42f7c3c9e --instance-id $INSTANCE_ID --device /dev/sdh\n",
+                            "apt-get update\n",
+                            "apt-get install -y tar wget git\n",
+                            "apt-get install -y openjdk-8-jdk\n",
+                            "apt-get install -y autoconf libtool\n",
+                            "apt-get -y install build-essential python-dev python-six python-virtualenv libcurl4-nss-dev libsasl2-dev libsasl2-modules maven libapr1-dev libsvn-dev zlib1g-dev iputils-ping\n",
+                            "apt install -y libssl-dev\n",
+                            "mkdir /home/ubuntu/.aws/\n",
+                            "printf '[default]\nregion = us-east-1' >> /home/ubuntu/.aws/config\n",
+                            "mkdir /data\n",
+                            "mount /dev/nvme1n1 /data\n",
+                            "echo 'export MESOS_NATIVE_JAVA_LIBRARY=/data/apps/mesos/mesos-1.9.0/build/src/.libs/libmesos.so' >> /home/ubuntu/.profile\n",
+                            "echo 'export MESOS_EXECUTOR_ENVIRONMENT_VARIABLES=file://data/apps/mesos/conf/executor_environment_variables.json' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLED=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_VERIFY_SERVER_CERT=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_REQUIRE_CLIENT_CERT=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME=openssl' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLE_DOWNGRADE=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_KEY_FILE=/data/pki/mesos/key-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_CERT_FILE=/data/pki/mesos/cert-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-master=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --zk=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --quorum=1 --ip=$LOCAL_IP --hostname=$LOCAL_IP --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-agent=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-agent.sh --master=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false --containerizers=docker --executor_environment_variables=file:///data/apps/mesos/conf/executor_environment_variables.json  >> /data/apps/mesos/logs/mesos-agent.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -\n",
+                            "add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable'\n",
+                            "apt-get update\n",
+                            "sudo apt-get install apt-transport-https ca-certificates curl software-properties-common\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - \n",
+                            "sudo add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable'\n",
+                            "sudo apt update\n",
+                            "apt-cache search docker-ce\n",
+                            "apt-cache policy docker-ce\n",
+                            "sudo apt-get install -y docker-ce\n",
+                            "usermod -aG docker ubuntu \n",
+                            "echo 'install done for { \"Ref\" : \"AWS::StackName\" }' > /root/test.txt\n",
+                            "runuser -l ubuntu -c 'source ~/.profile && /data/apps/mesos/mesos-1.9.0/build/bin/mesos-agent.sh --master=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIC", "PrimaryPrivateIpAddress"] },":2181/mesos --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false --containerizers=docker --executor_environment_variables=file:///data/apps/mesos/conf/executor_environment_variables.json  >> /data/apps/mesos/logs/mesos-agent.log 2>&1 &'\n",
+                            "aws ec2 create-tags --resources `curl -s http://169.254.169.254/latest/meta-data/instance-id` --tags Key=UserdataCompleted,Value=\"`date`\"\n"
+                        ]]
+                    }
+                }
+            }
+        },
+
+
+
+
+
+
+
+
+        "MarathonAEBS":{
+            "Type" : "AWS::EC2::Volume",
+            "Properties" : {
+                "AvailabilityZone" : { "Ref" : "MyAZA"},
+                "Size" : { "Ref" : "MyEBSSize"},
+                "SnapshotId" : {"Ref" : "MySnapShotId"},
+                "VolumeType" : "gp2",
+                "Tags" : [
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"marathon","ebs", { "Ref" : "MyAZA"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ]
+              }
+        },
+        "MarathonA": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "MyAZA"},
+                "IamInstanceProfile" : "EC2S3Access",
+                "InstanceType" : {"Ref" : "MyInstanceType"},
+                "ImageId" : {"Ref" : "MyImageId"},
+                "KeyName" : {"Ref" : "MyKeyName"},
+                "SecurityGroupIds" : [{"Ref" : "MySecurityGroupId"}],
+                "SubnetId" : {"Ref" : "MySubnetIdA"},
+                "Volumes" : [
+                    {
+                        "Device" : "/dev/sdg",
+                        "VolumeId" : {"Ref" : "MarathonAEBS"} 
+                    } 
+                        
+                ],
+                "Tags" : [ 
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"marathon", { "Ref" : "MyAZA"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ],
+                "UserData"       : { 
+                    "Fn::Base64" : { 
+                        "Fn::Join" : ["", [
+                            "#!/bin/bash \n",
+                            "apt-get update\n",
+                            "apt-get install -y awscli\n",
+                            "export AWS_DEFAULT_REGION=us-east-1\n",
+                            "echo 'export INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)' >> /home/ubuntu/.profile\n",
+                            "echo 'export LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_HOSTNAME=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)' >> /home/ubuntu/.profile\n",
+                            "#aws ec2 attach-volume --volume-id vol-03c493cb42f7c3c9e --instance-id $INSTANCE_ID --device /dev/sdh\n",
+                            "apt-get update\n",
+                            "apt-get install -y tar wget git\n",
+                            "apt-get install -y openjdk-8-jdk\n",
+                            "apt-get install -y autoconf libtool\n",
+                            "apt-get -y install build-essential python-dev python-six python-virtualenv libcurl4-nss-dev libsasl2-dev libsasl2-modules maven libapr1-dev libsvn-dev zlib1g-dev iputils-ping\n",
+                            "apt install -y libssl-dev\n",
+                            "mkdir /home/ubuntu/.aws/\n",
+                            "printf '[default]\nregion = us-east-1' >> /home/ubuntu/.aws/config\n",
+                            "mkdir /data\n",
+                            "mount /dev/nvme1n1 /data\n",
+                            "echo 'export MESOS_NATIVE_JAVA_LIBRARY=/data/apps/mesos/mesos-1.9.0/build/src/.libs/libmesos.so' >> /home/ubuntu/.profile\n",
+                            "echo 'export MESOS_EXECUTOR_ENVIRONMENT_VARIABLES=file://data/apps/mesos/conf/executor_environment_variables.json' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLED=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_VERIFY_SERVER_CERT=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_REQUIRE_CLIENT_CERT=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME=openssl' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLE_DOWNGRADE=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_KEY_FILE=/data/pki/mesos/key-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_CERT_FILE=/data/pki/mesos/cert-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-master=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --zk=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/mesos --quorum=1 --ip=$LOCAL_IP --hostname=$LOCAL_IP --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-agent=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-agent.sh --master=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/mesos --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false --containerizers=docker --executor_environment_variables=file:///data/apps/mesos/conf/executor_environment_variables.json --resources=\\\"ports(*):[80-81, 8000-9000, 31000-32000]\\\" >> /data/apps/mesos/logs/mesos-agent.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-marathon=\"/data/apps/marathon/marathon-1.5.0-96-gf84298d/bin/marathon --master zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/mesos --zk zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/marathon --https_port 8082 --ssl_keystore_path /data/pki/mesos/mesoskeystore.jks --ssl_keystore_password foobar --disable_http --logging_level all --hostname $PUBLIC_IP --leader_proxy_ssl_ignore_hostname >> /data/apps/marathon/logs/marathon.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -\n",
+                            "add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable'\n",
+                            "apt-get update\n",
+                            "sudo apt-get install apt-transport-https ca-certificates curl software-properties-common\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - \n",
+                            "sudo add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable'\n",
+                            "sudo apt update\n",
+                            "apt-cache search docker-ce\n",
+                            "apt-cache policy docker-ce\n",
+                            "sudo apt-get install -y docker-ce\n",
+                            "usermod -aG docker ubuntu \n",
+                            "echo 'install done for { \"Ref\" : \"AWS::StackName\" }' > /root/test.txt\n",
+                            "runuser -l ubuntu -c 'source ~/.profile && /data/apps/marathon/marathon-1.5.0-96-gf84298d/bin/marathon --master zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/mesos --zk zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/marathon --https_port 8082 --ssl_keystore_path /data/pki/mesos/mesoskeystore.jks --ssl_keystore_password foobar --disable_http --logging_level all --hostname $PUBLIC_IP --leader_proxy_ssl_ignore_hostname  >> /data/apps/marathon/logs/marathon.log 2>&1 &'\n",
+                            "aws ec2 create-tags --resources `curl -s http://169.254.169.254/latest/meta-data/instance-id` --tags Key=UserdataCompleted,Value=\"`date`\"\n"
+                        ]]
+                    }
+                }
+            }
+        },
+
+
+
+
+
+        "MarathonBEBS":{
+            "Type" : "AWS::EC2::Volume",
+            "Properties" : {
+                "AvailabilityZone" : { "Ref" : "MyAZB"},
+                "Size" : { "Ref" : "MyEBSSize"},
+                "SnapshotId" : {"Ref" : "MySnapShotId"},
+                "VolumeType" : "gp2",
+                "Tags" : [
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"marathon","ebs", { "Ref" : "MyAZB"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ]
+              }
+        },
+        "MarathonB": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "MyAZB"},
+                "IamInstanceProfile" : "EC2S3Access",
+                "InstanceType" : {"Ref" : "MyInstanceType"},
+                "ImageId" : {"Ref" : "MyImageId"},
+                "KeyName" : {"Ref" : "MyKeyName"},
+                "SecurityGroupIds" : [{"Ref" : "MySecurityGroupId"}],
+                "SubnetId" : {"Ref" : "MySubnetIdB"},
+                "Volumes" : [
+                    {
+                        "Device" : "/dev/sdg",
+                        "VolumeId" : {"Ref" : "MarathonBEBS"} 
+                    } 
+                        
+                ],
+                "Tags" : [ 
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"marathon", { "Ref" : "MyAZB"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ],
+                "UserData"       : { 
+                    "Fn::Base64" : { 
+                        "Fn::Join" : ["", [
+                            "#!/bin/bash \n",
+                            "apt-get update\n",
+                            "apt-get install -y awscli\n",
+                            "export AWS_DEFAULT_REGION=us-east-1\n",
+                            "echo 'export INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)' >> /home/ubuntu/.profile\n",
+                            "echo 'export LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_HOSTNAME=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)' >> /home/ubuntu/.profile\n",
+                            "#aws ec2 attach-volume --volume-id vol-03c493cb42f7c3c9e --instance-id $INSTANCE_ID --device /dev/sdh\n",
+                            "apt-get update\n",
+                            "apt-get install -y tar wget git\n",
+                            "apt-get install -y openjdk-8-jdk\n",
+                            "apt-get install -y autoconf libtool\n",
+                            "apt-get -y install build-essential python-dev python-six python-virtualenv libcurl4-nss-dev libsasl2-dev libsasl2-modules maven libapr1-dev libsvn-dev zlib1g-dev iputils-ping\n",
+                            "apt install -y libssl-dev\n",
+                            "mkdir /home/ubuntu/.aws/\n",
+                            "printf '[default]\nregion = us-east-1' >> /home/ubuntu/.aws/config\n",
+                            "mkdir /data\n",
+                            "mount /dev/nvme1n1 /data\n",
+                            "echo 'export MESOS_NATIVE_JAVA_LIBRARY=/data/apps/mesos/mesos-1.9.0/build/src/.libs/libmesos.so' >> /home/ubuntu/.profile\n",
+                            "echo 'export MESOS_EXECUTOR_ENVIRONMENT_VARIABLES=file://data/apps/mesos/conf/executor_environment_variables.json' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLED=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_VERIFY_SERVER_CERT=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_REQUIRE_CLIENT_CERT=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME=openssl' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLE_DOWNGRADE=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_KEY_FILE=/data/pki/mesos/key-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_CERT_FILE=/data/pki/mesos/cert-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-master=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --zk=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/mesos --quorum=1 --ip=$LOCAL_IP --hostname=$LOCAL_IP --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-agent=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-agent.sh --master=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/mesos --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false --containerizers=docker --executor_environment_variables=file:///data/apps/mesos/conf/executor_environment_variables.json --resources=\\\"ports(*):[80-81, 8000-9000, 31000-32000]\\\" >> /data/apps/mesos/logs/mesos-agent.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-marathon=\"/data/apps/marathon/marathon-1.5.0-96-gf84298d/bin/marathon --master zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/mesos --zk zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/marathon --https_port 8082 --ssl_keystore_path /data/pki/mesos/mesoskeystore.jks --ssl_keystore_password foobar --disable_http --logging_level all --hostname $PUBLIC_IP --leader_proxy_ssl_ignore_hostname  >> /data/apps/marathon/logs/marathon.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -\n",
+                            "add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable'\n",
+                            "apt-get update\n",
+                            "sudo apt-get install apt-transport-https ca-certificates curl software-properties-common\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - \n",
+                            "sudo add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable'\n",
+                            "sudo apt update\n",
+                            "apt-cache search docker-ce\n",
+                            "apt-cache policy docker-ce\n",
+                            "sudo apt-get install -y docker-ce\n",
+                            "usermod -aG docker ubuntu \n",
+                            "echo 'install done for { \"Ref\" : \"AWS::StackName\" }' > /root/test.txt\n",
+                            "runuser -l ubuntu -c 'source ~/.profile && /data/apps/marathon/marathon-1.5.0-96-gf84298d/bin/marathon --master zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/mesos --zk zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/marathon --https_port 8082 --ssl_keystore_path /data/pki/mesos/mesoskeystore.jks --ssl_keystore_password foobar --disable_http --logging_level all --hostname $PUBLIC_IP --leader_proxy_ssl_ignore_hostname  >> /data/apps/marathon/logs/marathon.log 2>&1 &'\n",
+                            "aws ec2 create-tags --resources `curl -s http://169.254.169.254/latest/meta-data/instance-id` --tags Key=UserdataCompleted,Value=\"`date`\"\n"
+                        ]]
+                    }
+                }
+            }
+        },
+
+
+
+
+
+
+
+        "MarathonCEBS":{
+            "Type" : "AWS::EC2::Volume",
+            "Properties" : {
+                "AvailabilityZone" : { "Ref" : "MyAZC"},
+                "Size" : { "Ref" : "MyEBSSize"},
+                "SnapshotId" : {"Ref" : "MySnapShotId"},
+                "VolumeType" : "gp2",
+                "Tags" : [
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"marathon","ebs", { "Ref" : "MyAZC"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ]
+              }
+        },
+        "MarathonC": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "MyAZC"},
+                "IamInstanceProfile" : "EC2S3Access",
+                "InstanceType" : {"Ref" : "MyInstanceType"},
+                "ImageId" : {"Ref" : "MyImageId"},
+                "KeyName" : {"Ref" : "MyKeyName"},
+                "SecurityGroupIds" : [{"Ref" : "MySecurityGroupId"}],
+                "SubnetId" : {"Ref" : "MySubnetIdC"},
+                "Volumes" : [
+                    {
+                        "Device" : "/dev/sdg",
+                        "VolumeId" : {"Ref" : "MarathonCEBS"} 
+                    } 
+                        
+                ],
+                "Tags" : [ 
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", [{ "Ref" : "Application" },{ "Ref" : "Environment" },"marathon", { "Ref" : "MyAZC"} ] ] }
+                    },
+                    {
+                        "Key" : "Application",
+                        "Value" : { "Ref" : "Application" }
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "Environment" }
+                    } 
+                ],
+                "UserData"       : { 
+                    "Fn::Base64" : { 
+                        "Fn::Join" : ["", [
+                            "#!/bin/bash \n",
+                            "apt-get update\n",
+                            "apt-get install -y awscli\n",
+                            "export AWS_DEFAULT_REGION=us-east-1\n",
+                            "echo 'export INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)' >> /home/ubuntu/.profile\n",
+                            "echo 'export LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_HOSTNAME=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)' >> /home/ubuntu/.profile\n",
+                            "#aws ec2 attach-volume --volume-id vol-03c493cb42f7c3c9e --instance-id $INSTANCE_ID --device /dev/sdh\n",
+                            "apt-get update\n",
+                            "apt-get install -y tar wget git\n",
+                            "apt-get install -y openjdk-8-jdk\n",
+                            "apt-get install -y autoconf libtool\n",
+                            "apt-get -y install build-essential python-dev python-six python-virtualenv libcurl4-nss-dev libsasl2-dev libsasl2-modules maven libapr1-dev libsvn-dev zlib1g-dev iputils-ping\n",
+                            "apt install -y libssl-dev\n",
+                            "mkdir /home/ubuntu/.aws/\n",
+                            "printf '[default]\nregion = us-east-1' >> /home/ubuntu/.aws/config\n",
+                            "mkdir /data\n",
+                            "mount /dev/nvme1n1 /data\n",
+                            "echo 'export MESOS_NATIVE_JAVA_LIBRARY=/data/apps/mesos/mesos-1.9.0/build/src/.libs/libmesos.so' >> /home/ubuntu/.profile\n",
+                            "echo 'export MESOS_EXECUTOR_ENVIRONMENT_VARIABLES=file://data/apps/mesos/conf/executor_environment_variables.json' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLED=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_VERIFY_SERVER_CERT=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_REQUIRE_CLIENT_CERT=true' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_HOSTNAME_VALIDATION_SCHEME=openssl' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_ENABLE_DOWNGRADE=false' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_KEY_FILE=/data/pki/mesos/key-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'export LIBPROCESS_SSL_CERT_FILE=/data/pki/mesos/cert-np.pem' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-master=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --zk=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/mesos --quorum=1 --ip=$LOCAL_IP --hostname=$LOCAL_IP --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-mesos-agent=\"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-agent.sh --master=zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/mesos --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false --containerizers=docker --executor_environment_variables=file:///data/apps/mesos/conf/executor_environment_variables.json --resources=\\\"ports(*):[80-81, 8000-9000, 31000-32000]\\\" >> /data/apps/mesos/logs/mesos-agent.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "echo 'alias start-marathon=\"/data/apps/marathon/marathon-1.5.0-96-gf84298d/bin/marathon --master zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/mesos --zk zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/marathon --https_port 8082 --ssl_keystore_path /data/pki/mesos/mesoskeystore.jks --ssl_keystore_password foobar --disable_http --logging_level all --hostname $PUBLIC_IP --leader_proxy_ssl_ignore_hostname  >> /data/apps/marathon/logs/marathon.log 2>&1 &\"' >> /home/ubuntu/.profile\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -\n",
+                            "add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable'\n",
+                            "apt-get update\n",
+                            "sudo apt-get install apt-transport-https ca-certificates curl software-properties-common\n",
+                            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - \n",
+                            "sudo add-apt-repository 'deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable'\n",
+                            "sudo apt update\n",
+                            "apt-cache search docker-ce\n",
+                            "apt-cache policy docker-ce\n",
+                            "sudo apt-get install -y docker-ce\n",
+                            "usermod -aG docker ubuntu \n",
+                            "echo 'install done for { \"Ref\" : \"AWS::StackName\" }' > /root/test.txt\n",
+                            "runuser -l ubuntu -c 'source ~/.profile && /data/apps/marathon/marathon-1.5.0-96-gf84298d/bin/marathon --master zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/mesos --zk zk://",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIB", "PrimaryPrivateIpAddress"] },":2181,",{"Fn::GetAtt" : ["ZookeeperENIA", "PrimaryPrivateIpAddress"] },":2181/marathon --https_port 8082 --ssl_keystore_path /data/pki/mesos/mesoskeystore.jks --ssl_keystore_password foobar --disable_http --logging_level all --hostname $PUBLIC_IP --leader_proxy_ssl_ignore_hostname  >> /data/apps/marathon/logs/marathon.log 2>&1 &'\n",
+                            "aws ec2 create-tags --resources `curl -s http://169.254.169.254/latest/meta-data/instance-id` --tags Key=UserdataCompleted,Value=\"`date`\"\n"
+                        ]]
+                    }
+                }
+            }
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+    }
+}

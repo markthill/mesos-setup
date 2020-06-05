@@ -20,6 +20,6 @@ mkdir logs
 wget http://archive.apache.org/dist/zookeeper/zookeeper-3.6.1/apache-zookeeper-3.6.1-bin.tar.gz
 tar -zxf apache-zookeeper-3.6.1-bin.tar.gz
 
-printf "tickTime=2000\ninitLimit=10\nsyncLimit=5\ndataDir=/home/ubuntu/apps/zookeeper/data\nclientPort=2181" >> /home/ubuntu/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg
+printf "tickTime=2000\ninitLimit=10\nsyncLimit=5\ndataDir=/home/ubuntu/apps/zookeeper/data\nclientPort=2181\n4lw.commands.whitelist=*" >> /home/ubuntu/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg
 
 /home/ubuntu/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh start >> /home/ubuntu/apps/zookeeper/logs/zookeeper.log 2>&1 &
