@@ -1,0 +1,108 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "fooo",
+    "Parameters": {
+        "subnetId": {
+            "Type": "String",
+            "Default": "subnet-d76fb78a"
+        },
+        "zookeeperImageId" : {
+            "Type": "String",
+            "Default": "ami-039a49e70ea773ffc"
+        },
+        "sshKeyName" : {
+            "Type": "String",
+            "Default": "ecs-key-pair-us-east-1"
+        },
+        "zookeeperId" : {
+            "Type": "String",
+            "Default": "1"
+        },
+        "instanceProfileName" : {
+            "Type": "String",
+            "Default": "zookeeperInstanceRole"
+        },
+        "mesosSecurityGroupId" : {
+            "Type": "String",
+            "Default": "sg-69e3fc1c"
+        },
+        "zookeeperInstanceType" : {
+            "Type": "String",
+            "Default": "t3.micro"
+        },
+        "environment" : {
+            "Type": "String",
+            "Default": "development"
+        },
+        "stackId": {
+            "Type": "String"
+        }  
+    },
+    "Resources": {
+        "ZookeeperInstance": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "SubnetId" : {"Ref": "subnetId"},
+                "IamInstanceProfile" : {"Ref": "instanceProfileName"},
+                "InstanceType" : {"Ref": "zookeeperInstanceType"},
+                "ImageId": {"Ref" : "zookeeperImageId"},
+                "KeyName": {"Ref" : "sshKeyName"},
+                "SecurityGroupIds": [{"Ref": "mesosSecurityGroupId"}],
+                "Tags" : [ 
+                    {
+                        "Key" : "Name",
+                        "Value" : { "Fn::Join" : [ "-", ["zookeeper",{ "Ref" : "environment" }] ] }
+                    },
+                    {
+                        "Key" : "Tier",
+                        "Value" : "zookeeper"
+                    }, 
+                    {
+                        "Key" : "Envrionment",
+                        "Value" : { "Ref" : "environment" }
+                    },
+                    {
+                        "Key" : "ZookeeperInstance",
+                        "Value" : { "Fn::Join" : [ "-", ["zookeeper", {"Ref": "stackId"}] ] }
+                    }
+                ],     
+                "UserData"       : { 
+                    "Fn::Base64" : { 
+                        "Fn::Join" : ["", [
+                            "#!/bin/bash \n",
+                            "apt-get update\n",
+                            "apt-get install -y awscli\n",
+                            "export AWS_DEFAULT_REGION=us-east-1\n",
+                            "echo 'export INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)' >> /home/ubuntu/.profile\n",
+                            "echo 'export LOCAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)' >> /home/ubuntu/.profile\n",
+                            "echo 'export PUBLIC_HOSTNAME=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)' >> /home/ubuntu/.profile\n",
+                            "apt-get install -y tar wget git\n",
+                            "apt-get install -y openjdk-8-jdk\n",
+                            "mkdir /home/ubuntu/.aws/\n",
+                            "printf '[default]\nregion = us-east-1' >> /home/ubuntu/.aws/config\n",
+                            "mkdir -p /home/ubuntu/apps/zookeeper\n",
+                            "cd /home/ubuntu/apps/zookeeper/\n",
+                            "wget http://archive.apache.org/dist/zookeeper/zookeeper-3.6.1/apache-zookeeper-3.6.1-bin.tar.gz\n",
+                            "tar -zxf apache-zookeeper-3.6.1-bin.tar.gz\n",
+                            "mkdir data\n",
+                            "mkdir logs\n",
+                            "mkdir /home/ubuntu/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/\n",
+                            "echo 'alias start-zoo=\"/home/ubuntu/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh start\"' >> /home/ubuntu/.profile\n",
+                            "echo 'alias stop-zoo=\"/home/ubuntu/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh stop\"' >> /home/ubuntu/.profile\n",
+                            "echo 'tickTime=2000' >> /home/ubuntu/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'initLimit=5' >> /home/ubuntu/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'syncLimit=2' >> /home/ubuntu/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'dataDir=/home/ubuntu/apps/zookeeper/data' >> /home/ubuntu/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo 'clientPort=2181' >> /home/ubuntu/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "echo '4lw.commands.whitelist=*' >> /home/ubuntu/apps/zookeeper/apache-zookeeper-3.6.1-bin/conf/zoo.cfg\n",
+                            "chown -R ubuntu:ubuntu /home/ubuntu/apps/\n",
+                            "runuser -l ubuntu -c '/home/ubuntu/apps/zookeeper/apache-zookeeper-3.6.1-bin/bin/zkServer.sh start'\n",
+                            "aws ec2 create-tags --resources `curl -s http://169.254.169.254/latest/meta-data/instance-id` --tags Key=UserdataCompleted,Value=\"`date`\"\n"
+                        ]]
+                    }
+                }
+            }
+        }
+    }
+}

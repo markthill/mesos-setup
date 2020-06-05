@@ -1,0 +1,234 @@
+{
+    "Parameters": {
+        "Application": {
+            "Type": "String",
+            "Default": "Mesos",
+            "Description": "Name of application"
+        },
+        "Environment": {
+            "Type": "String",
+            "Default": "development",
+            "Description": "Name of environment"
+        },
+        "MyInstanceType": {
+            "Type": "String",
+            "Default": "t3.medium",
+            "Description": "Instance Type for cluster"
+        },
+        "MyImageId": {
+            "Type": "String",
+            "Default": "ami-039a49e70ea773ffc",
+            "Description": "Instance AMI Id (Ubuntu 18.04)"
+        },
+        "MyKeyName": {
+            "Type": "String",
+            "Default": "ecs-key-pair-us-east-1",
+            "Description": "SSH Key for Instances"
+        },
+        "MySecurityGroupId": {
+            "Type": "String",
+            "Default": "sg-0badeb412d8db1ba3",
+            "Description": "Security Group Id for Mesos / Marathon / Zookeeper Cluster"
+        },
+        "MySubnetIdA": {
+            "Type": "String",
+            "Default": "subnet-03a49bec3193956fd",
+            "Description": "Sample SubnetId for all resources in AZ A"
+        },
+        "MyAZA": {
+            "Type": "String",
+            "Default": "us-east-1a",
+            "Description": "Availability Zone A for mesos cluster"
+        },
+        "MySubnetIdB": {
+            "Type": "String",
+            "Default": "subnet-03a49bec3193956fd",
+            "Description": "Sample SubnetId for all resources in AZ B"
+        },
+        "MyAZB": {
+            "Type": "String",
+            "Default": "us-east-1a",
+            "Description": "Availability Zone B for mesos cluster"
+        },
+        "MySubnetIdC": {
+            "Type": "String",
+            "Default": "subnet-03a49bec3193956fd",
+            "Description": "Sample SubnetId for all resources in AZ C"
+        },
+        "MyAZC": {
+            "Type": "String",
+            "Default": "us-east-1a",
+            "Description": "Availability Zone C for mesos cluster"
+        },
+        "MyEBSSize": {
+            "Type": "Number",
+            "Default": "100",
+            "Description": "EBS Volume Size for All instances"
+        },
+        "defaultVPC": {
+            "Type": "String",
+            "Default": "vpc-af81e9d7",
+            "Description": "Default VPC ID"
+        },
+        "myIPCidr": {
+            "Type": "String",
+            "Default": "173.67.202.129/32",
+            "Description": "Your router IP address to allow all traffic from it"
+        },
+        "subnetUSEast1d": {
+            "Type": "String",
+            "Default": "subnet-d76fb78a",
+            "Description": "Your subnet ID for us-east-1d"
+        },
+        "zookeeperImageId": {
+            "Type": "String",
+            "Default": "ami-039a49e70ea773ffc",
+            "Description": "The Ubuntu image id"
+        },
+        "mesosImageId": {
+            "Type": "String",
+            "Default": "ami-039a49e70ea773ffc",
+            "Description": "The Ubuntu image id for mesos"
+        },        
+        "zookeeperInstanceType": {
+            "Type": "String",
+            "Default": "t3.micro",
+            "Description": "The instance type of the zookeeper instance(s)"
+        },
+        "mesosInstanceType": {
+            "Type": "String",
+            "Default": "t3.micro",
+            "Description": "The instance type of the mesos instance(s)"
+        }
+    },
+    "Resources": {
+        "SharedSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Shared security group for Mesos cluster",
+                "GroupName": { "Fn::Join" : [ "-", [ "mesos-cluster-sg", {"Ref": "AWS::StackId"} ] ] },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 0,
+                        "ToPort": 65535,
+                        "CidrIp": {
+                            "Ref": "myIPCidr"
+                        }
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "defaultVPC"
+                }
+            }
+        },
+        "SharedSecurityGroupSelfReference": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Properties": {
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "SourceSecurityGroupId": {
+                    "Ref": "SharedSecurityGroup"
+                },
+                "GroupId": {
+                    "Ref": "SharedSecurityGroup"
+                }
+            }
+        },
+        "MesosEC2Role": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "Description": "The mesos role to give to EC2 instances",
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ec2.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+                    "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+                ]
+            }
+        },
+        "InstanceProfile": {
+            "Type": "AWS::IAM::InstanceProfile",
+            "Properties": {
+                "Roles": [
+                    {
+                        "Ref": "MesosEC2Role"
+                    }
+                ]
+            }
+        },
+        "ZookeeperNestedStack1": {
+            "Type": "AWS::CloudFormation::Stack",
+            "Properties": {
+                "TemplateURL": "https://mesos-development.s3.amazonaws.com/cloud-formation/zookeeper.json",
+                "Parameters": {
+                    "mesosSecurityGroupId": {
+                        "Fn::GetAtt": [
+                            "SharedSecurityGroup",
+                            "GroupId"
+                        ]
+                    },
+                    "instanceProfileName": {
+                        "Ref": "InstanceProfile"
+                    },
+                    "sshKeyName": {
+                        "Ref": "MyKeyName"
+                    },
+                    "zookeeperImageId": {
+                        "Ref": "zookeeperImageId"
+                    },
+                    "subnetId": {
+                        "Ref": "subnetUSEast1d"
+                    },
+                    "stackId": {"Ref": "AWS::StackId"}
+                }
+            }
+        },
+        "MesosMaster": {
+            "Type": "AWS::CloudFormation::Stack",
+            "Properties": {
+                "TemplateURL": "https://mesos-development.s3.amazonaws.com/cloud-formation/mesos.json",
+                "Parameters": {
+                    "mesosSecurityGroupId": {
+                        "Fn::GetAtt": [
+                            "SharedSecurityGroup",
+                            "GroupId"
+                        ]
+                    },
+                    "instanceProfileName": {
+                        "Ref": "InstanceProfile"
+                    },
+                    "sshKeyName": {
+                        "Ref": "MyKeyName"
+                    },
+                    "mesosImageId": {
+                        "Ref": "mesosImageId"
+                    },
+                    "subnetId": {
+                        "Ref": "subnetUSEast1d"
+                    },
+                    "mesosType": "Master",
+                    "mesosInstanceType": {
+                        "Ref": "mesosInstanceType"
+                    },
+                    "stackId": {"Ref": "AWS::StackId"}
+                }
+            }
+        }
+    }
+}
