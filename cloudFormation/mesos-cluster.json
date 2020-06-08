@@ -135,7 +135,7 @@
         "ZookeeperNestedStack1": {
             "Type": "AWS::CloudFormation::Stack",
             "Properties": {
-                "TemplateURL": "https://mesos-development.s3.amazonaws.com/cloud-formation/zookeeper.json",
+                "TemplateURL": { "Fn::Join" : [ "", [ "https://mesos-development.s3.amazonaws.com/", {"Ref": "Environment"}, "/cloud-formation/zookeeper.json" ] ] },
                 "Parameters": {
                     "mesosSecurityGroupId": {
                         "Fn::GetAtt": [
@@ -162,7 +162,7 @@
         "MesosMaster": {
             "Type": "AWS::CloudFormation::Stack",
             "Properties": {
-                "TemplateURL": "https://mesos-development.s3.amazonaws.com/cloud-formation/mesos.json",
+                "TemplateURL": { "Fn::Join" : [ "", [ "https://mesos-development.s3.amazonaws.com/", {"Ref": "Environment"}, "/cloud-formation/mesos.json" ] ] },
                 "Parameters": {
                     "mesosSecurityGroupId": {
                         "Fn::GetAtt": [
@@ -193,7 +193,7 @@
         "MesosAgent": {
             "Type": "AWS::CloudFormation::Stack",
             "Properties": {
-                "TemplateURL": "https://mesos-development.s3.amazonaws.com/cloud-formation/mesos.json",
+                "TemplateURL": { "Fn::Join" : [ "", [ "https://mesos-development.s3.amazonaws.com/", {"Ref": "Environment"}, "/cloud-formation/mesos.json" ] ] },
                 "Parameters": {
                     "mesosSecurityGroupId": {
                         "Fn::GetAtt": [
@@ -224,7 +224,7 @@
         "Marathon": {
             "Type": "AWS::CloudFormation::Stack",
             "Properties": {
-                "TemplateURL": "https://mesos-development.s3.amazonaws.com/cloud-formation/marathon.json",
+                "TemplateURL": { "Fn::Join" : [ "", [ "https://mesos-development.s3.amazonaws.com/", {"Ref": "Environment"}, "/cloud-formation/marathon.json" ] ] },
                 "Parameters": {
                     "mesosSecurityGroupId": {
                         "Fn::GetAtt": [
