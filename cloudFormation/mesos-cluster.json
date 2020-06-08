@@ -1,5 +1,15 @@
 {
     "Parameters": {
+        "myIPCidr": {
+            "Type": "String",
+            "Default": "173.67.202.129/32",
+            "Description": "Your router IP address to allow all traffic from it"
+        },
+        "subnetUSEast1d": {
+            "Type": "String",
+            "Default": "subnet-d76fb78a",
+            "Description": "Your subnet ID for us-east-1d"
+        },
         "Application": {
             "Type": "String",
             "Default": "Mesos",
@@ -10,75 +20,15 @@
             "Default": "development",
             "Description": "Name of environment"
         },
-        "MyInstanceType": {
-            "Type": "String",
-            "Default": "t3.medium",
-            "Description": "Instance Type for cluster"
-        },
-        "MyImageId": {
-            "Type": "String",
-            "Default": "ami-039a49e70ea773ffc",
-            "Description": "Instance AMI Id (Ubuntu 18.04)"
-        },
         "MyKeyName": {
             "Type": "String",
             "Default": "ecs-key-pair-us-east-1",
             "Description": "SSH Key for Instances"
         },
-        "MySecurityGroupId": {
-            "Type": "String",
-            "Default": "sg-0badeb412d8db1ba3",
-            "Description": "Security Group Id for Mesos / Marathon / Zookeeper Cluster"
-        },
-        "MySubnetIdA": {
-            "Type": "String",
-            "Default": "subnet-03a49bec3193956fd",
-            "Description": "Sample SubnetId for all resources in AZ A"
-        },
-        "MyAZA": {
-            "Type": "String",
-            "Default": "us-east-1a",
-            "Description": "Availability Zone A for mesos cluster"
-        },
-        "MySubnetIdB": {
-            "Type": "String",
-            "Default": "subnet-03a49bec3193956fd",
-            "Description": "Sample SubnetId for all resources in AZ B"
-        },
-        "MyAZB": {
-            "Type": "String",
-            "Default": "us-east-1a",
-            "Description": "Availability Zone B for mesos cluster"
-        },
-        "MySubnetIdC": {
-            "Type": "String",
-            "Default": "subnet-03a49bec3193956fd",
-            "Description": "Sample SubnetId for all resources in AZ C"
-        },
-        "MyAZC": {
-            "Type": "String",
-            "Default": "us-east-1a",
-            "Description": "Availability Zone C for mesos cluster"
-        },
-        "MyEBSSize": {
-            "Type": "Number",
-            "Default": "100",
-            "Description": "EBS Volume Size for All instances"
-        },
         "defaultVPC": {
             "Type": "String",
             "Default": "vpc-af81e9d7",
             "Description": "Default VPC ID"
-        },
-        "myIPCidr": {
-            "Type": "String",
-            "Default": "173.67.202.129/32",
-            "Description": "Your router IP address to allow all traffic from it"
-        },
-        "subnetUSEast1d": {
-            "Type": "String",
-            "Default": "subnet-d76fb78a",
-            "Description": "Your subnet ID for us-east-1d"
         },
         "zookeeperImageId": {
             "Type": "String",
@@ -95,10 +45,20 @@
             "Default": "t3.micro",
             "Description": "The instance type of the zookeeper instance(s)"
         },
-        "mesosInstanceType": {
+        "mesosMasterInstanceType": {
             "Type": "String",
             "Default": "t3.micro",
-            "Description": "The instance type of the mesos instance(s)"
+            "Description": "The instance type of the mesos master instance(s)"
+        },
+        "mesosAgentInstanceType": {
+            "Type": "String",
+            "Default": "t3.micro",
+            "Description": "The instance type of the mesos agent instance(s)"
+        },
+        "marathonInstanceType": {
+            "Type": "String",
+            "Default": "t3.micro",
+            "Description": "The instance type of the Marathon(s)"
         }
     },
     "Resources": {
@@ -224,7 +184,69 @@
                     },
                     "mesosType": "Master",
                     "mesosInstanceType": {
-                        "Ref": "mesosInstanceType"
+                        "Ref": "mesosMasterInstanceType"
+                    },
+                    "stackId": {"Ref": "AWS::StackId"}
+                }
+            }
+        },
+        "MesosAgent": {
+            "Type": "AWS::CloudFormation::Stack",
+            "Properties": {
+                "TemplateURL": "https://mesos-development.s3.amazonaws.com/cloud-formation/mesos.json",
+                "Parameters": {
+                    "mesosSecurityGroupId": {
+                        "Fn::GetAtt": [
+                            "SharedSecurityGroup",
+                            "GroupId"
+                        ]
+                    },
+                    "instanceProfileName": {
+                        "Ref": "InstanceProfile"
+                    },
+                    "sshKeyName": {
+                        "Ref": "MyKeyName"
+                    },
+                    "mesosImageId": {
+                        "Ref": "mesosImageId"
+                    },
+                    "subnetId": {
+                        "Ref": "subnetUSEast1d"
+                    },
+                    "mesosType": "Agent",
+                    "mesosInstanceType": {
+                        "Ref": "mesosAgentInstanceType"
+                    },
+                    "stackId": {"Ref": "AWS::StackId"}
+                }
+            }
+        },
+        "Marathon": {
+            "Type": "AWS::CloudFormation::Stack",
+            "Properties": {
+                "TemplateURL": "https://mesos-development.s3.amazonaws.com/cloud-formation/marathon.json",
+                "Parameters": {
+                    "mesosSecurityGroupId": {
+                        "Fn::GetAtt": [
+                            "SharedSecurityGroup",
+                            "GroupId"
+                        ]
+                    },
+                    "instanceProfileName": {
+                        "Ref": "InstanceProfile"
+                    },
+                    "sshKeyName": {
+                        "Ref": "MyKeyName"
+                    },
+                    "mesosImageId": {
+                        "Ref": "mesosImageId"
+                    },
+                    "subnetId": {
+                        "Ref": "subnetUSEast1d"
+                    },
+                    "mesosType": "Marathon",
+                    "mesosInstanceType": {
+                        "Ref": "marathonInstanceType"
                     },
                     "stackId": {"Ref": "AWS::StackId"}
                 }

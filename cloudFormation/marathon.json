@@ -60,7 +60,7 @@
                     {
                        "DeviceName" : "/dev/sda1",
                        "Ebs" : {
-                         "DeleteOnTermination" : "true",
+                         "DeleteOnTermination" : "false",
                          "VolumeSize" : "15"
                        }
                      }, 
@@ -150,13 +150,7 @@
                             "mount --bind /home/ubuntu/ /data\n",
                             "chown -R ubuntu:ubuntu /home/ubuntu/apps/\n",
                             "chown -R ubuntu:ubuntu /home/ubuntu/pki/\n",
-                            {
-                                "Fn::If" : [
-                                  "IsMaster",
-                                  "runuser -l ubuntu -c \"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-master.sh --zk=zk://$ZOOKEEPER_IP:2181/mesos --quorum=1 --hostname=$PUBLIC_HOSTNAME --work_dir=/data/apps/mesos/work-dir >> /data/apps/mesos/logs/mesos-master.log 2>&1 &\"\n",
-                                  "runuser -l ubuntu -c \"/data/apps/mesos/mesos-1.9.0/build/bin/mesos-agent.sh --master=$MASTER_IP:5050 --hostname=$PUBLIC_HOSTNAME --work_dir=/data/apps/mesos/work-dir --systemd_enable_support=false --containerizers=docker --executor_environment_variables=file:///data/apps/mesos/conf/executor_environment_variables.json --resources=\\\"ports(*):[80-81, 8000-9000, 31000-32000]\\\" >> /data/apps/mesos/logs/mesos-agent.log 2>&1 &\"\n"
-                                ]
-                              }
+                            "runuser -l ubuntu -c \"/data/apps/marathon/marathon-1.8.222-86475ddac/bin/marathon --https_port 8082 --ssl_keystore_path /data/pki/mesos/mesoskeystore.jks --ssl_keystore_password foobar --master $MASTER_IP:5050 --zk zk://$ZOOKEEPER_IP:2181/marathon --disable_http --logging_level all  >> /data/apps/marathon/logs/marathon.log 2>&1 &\"\n"
                         ]]
                     }
                 }
