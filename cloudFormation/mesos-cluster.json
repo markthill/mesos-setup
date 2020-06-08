@@ -27,7 +27,7 @@
         },
         "Environment": {
             "Type": "String",
-            "Default": "development",
+            "Default": "test",
             "Description": "Name of environment"
         },
         "zookeeperImageId": {
