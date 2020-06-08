@@ -813,7 +813,7 @@
                         "Value" : { "Ref" : "Application" }
                     }, 
                     {
-                        "Key" : "Envrionment",
+                        "Key" : "Envionment",
                         "Value" : { "Ref" : "Environment" }
                     } 
                 ],

@@ -79,7 +79,7 @@
                         "Value" : {"Ref": "mesosType"}
                     }, 
                     {
-                        "Key" : "Envrionment",
+                        "Key" : "Environment",
                         "Value" : { "Ref" : "environment" }
                     },
                     {
@@ -105,8 +105,8 @@
                             "mkdir -p /home/ubuntu/apps/mesos\n",
                             "mkdir -p /home/ubuntu/apps/mesos/logs\n",
                             "mkdir -p /home/ubuntu/apps/marathon/logs\n",
-                            "aws s3 cp s3://mesos-development/compiled-source/mesos-1.9.0-060120.tar.gz /home/ubuntu/apps/mesos/mesos-1.9.0-060120.tar.gz\n",
-                            "aws s3 cp s3://mesos-development/conf/executor_environment_variables.json /home/ubuntu/apps/mesos/conf/executor_environment_variables.json\n",
+                            "aws s3 cp s3://mesos-development/", {"Ref": "environment"}, "/compiled-source/mesos-1.9.0-060120.tar.gz /home/ubuntu/apps/mesos/mesos-1.9.0-060120.tar.gz\n",
+                            "aws s3 cp s3://mesos-development/", {"Ref": "environment"}, "/conf/executor_environment_variables.json /home/ubuntu/apps/mesos/conf/executor_environment_variables.json\n",
                             "cd /home/ubuntu/apps/mesos/\n",
                             "mkdir work-dir\n",
                             "tar -xzf mesos-1.9.0-060120.tar.gz\n",
@@ -114,9 +114,9 @@
                             "wget https://downloads.mesosphere.io/marathon/builds/1.8.222-86475ddac/marathon-1.8.222-86475ddac.tgz\n",
                             "tar -xzf marathon-1.8.222-86475ddac.tgz\n",
                             "mkdir -p /home/ubuntu/pki/mesos\n",
-                            "aws s3 cp s3://mesos-development/pki/cert-np.pem /home/ubuntu/pki/mesos/cert-np.pem\n",
-                            "aws s3 cp s3://mesos-development/pki/key-np.pem /home/ubuntu/pki/mesos/key-np.pem\n",
-                            "aws s3 cp s3://mesos-development/pki/mesoskeystore.jks /home/ubuntu/pki/mesos/mesoskeystore.jks\n",
+                            "aws s3 cp s3://mesos-development/", {"Ref": "environment"}, "/pki/cert-np.pem /home/ubuntu/pki/mesos/cert-np.pem\n",
+                            "aws s3 cp s3://mesos-development/", {"Ref": "environment"}, "/pki/key-np.pem /home/ubuntu/pki/mesos/key-np.pem\n",
+                            "aws s3 cp s3://mesos-development/", {"Ref": "environment"}, "/pki/mesoskeystore.jks /home/ubuntu/pki/mesos/mesoskeystore.jks\n",
                             "apt-get update\n",
                             "apt-get install -y tar wget git\n",
                             "apt-get install -y openjdk-8-jdk\n",
