@@ -10,6 +10,16 @@
             "Default": "subnet-d76fb78a",
             "Description": "Your subnet ID for us-east-1d"
         },
+        "defaultVPC": {
+            "Type": "String",
+            "Default": "vpc-af81e9d7",
+            "Description": "Default VPC ID"
+        },
+        "MyKeyName": {
+            "Type": "String",
+            "Default": "ecs-key-pair-us-east-1",
+            "Description": "SSH Key for Instances"
+        },
         "Application": {
             "Type": "String",
             "Default": "Mesos",
@@ -19,16 +29,6 @@
             "Type": "String",
             "Default": "development",
             "Description": "Name of environment"
-        },
-        "MyKeyName": {
-            "Type": "String",
-            "Default": "ecs-key-pair-us-east-1",
-            "Description": "SSH Key for Instances"
-        },
-        "defaultVPC": {
-            "Type": "String",
-            "Default": "vpc-af81e9d7",
-            "Description": "Default VPC ID"
         },
         "zookeeperImageId": {
             "Type": "String",
