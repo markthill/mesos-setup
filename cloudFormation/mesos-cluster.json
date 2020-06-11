@@ -186,7 +186,8 @@
                     "mesosInstanceType": {
                         "Ref": "mesosMasterInstanceType"
                     },
-                    "stackId": {"Ref": "AWS::StackId"}
+                    "stackId": {"Ref": "AWS::StackId"},
+                    "asgMinSize": "1"
                 }
             }
         },
@@ -217,7 +218,8 @@
                     "mesosInstanceType": {
                         "Ref": "mesosAgentInstanceType"
                     },
-                    "stackId": {"Ref": "AWS::StackId"}
+                    "stackId": {"Ref": "AWS::StackId"},
+                    "asgMinSize": "3"
                 }
             }
         },
